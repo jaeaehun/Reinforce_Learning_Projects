@@ -1,6 +1,7 @@
 import pygame
 from pygame.locals import *
 import sys  # 외장 모듈
+import math
 
 WIDTH = 1500
 HEIGHT = 1200
@@ -80,9 +81,6 @@ def get_road_point(road_name, point):
             return [road_info['x'], road_info['y'] - get_pixel(road_info['length']) / 2]
         elif road_info['direction'] == 'n':
             return [road_info['x'], road_info['y'] + get_pixel(road_info['length']) / 2]
-        else:
-            print("error by making cars: maybe wrong direction")
-            return
     elif point == "end":
         if road_info['direction'] == 'e':
             return [road_info['x'] + get_pixel(road_info['length']) / 2, road_info['y']]
@@ -92,9 +90,9 @@ def get_road_point(road_name, point):
             return [road_info['x'], road_info['y'] + get_pixel(road_info['length']) / 2]
         elif road_info['direction'] == 'n':
             return [road_info['x'], road_info['y'] - get_pixel(road_info['length']) / 2]
-        else:
-            print("error by making cars: maybe wrong direction")
-            return
+    else:
+        print("error by get road point: maybe wrong point")
+        return
 
 
 def set_car_start_point():
@@ -103,31 +101,51 @@ def set_car_start_point():
         car_info['current_road'] = car_info['Route'][0]
 
 
+def collide_check(point1, point2, radius):
+    if abs(point1[0] - point2[0]) < radius and abs(point1[1] - point2[1]) < radius:
+        return True
+    else:
+        return False
+
+
 def draw_car():
     for car_name, car_info in car_dict.items():
         x = car_info['x']
         y = car_info['y']
         # 길 끝나면 다음길로 이동하는 알고리즘 생각하기
-        print(f"car: {car_name}, curr_road: {car_info['current_road']}")
+        # print(f"car: {car_name}, curr_road: {car_info['current_road']}, {car_info['crossing']}")
 
-        if x == get_road_point(car_info['current_road'], "end")[0] and y == get_road_point(car_info['current_road'], "end")[1]:
+        if car_info['crossing'] is True:    # 길이 교차로일 때
             try:
-                car_info['current_road'] = car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1]
-                car_info['x'], car_info['y'] = get_road_point(car_info['current_road'], "start")
-                x = car_info['x']
-                y = car_info['y']
+                if collide_check([x, y], get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1], "start"), 5):
+                    car_info['crossing'] = False
+                    car_info['current_road'] = car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1]
+                    car_info['x'], car_info['y'] = get_road_point(car_info['current_road'], "start")
+                    x = car_info['x']
+                    y = car_info['y']
+                else:
+                    print(get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road'])], "end"), get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1], "start"))
+                    x += (get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1], "start")[0] - get_road_point(car_info['current_road'], "end")[0]) / 100
+                    y += (get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1], "start")[1] - get_road_point(car_info['current_road'], "end")[1]) / 100
             except Exception:
                 x, y = get_road_point(car_info['Route'][0], "start")
                 car_info['current_road'] = car_info['Route'][0]
+                car_info['crossing'] = False
 
-        if road_dict[car_info['current_road']]['direction'] == 'e':
-            x += get_pixel(car_info['speed'])
-        if road_dict[car_info['current_road']]['direction'] == 'w':
-            x -= get_pixel(car_info['speed'])
-        if road_dict[car_info['current_road']]['direction'] == 's':
-            y += get_pixel(car_info['speed'])
-        if road_dict[car_info['current_road']]['direction'] == 'n':
-            y -= get_pixel(car_info['speed'])
+        else:   # crossing이 False일 때
+            if collide_check([x, y], get_road_point(car_info['current_road'], "end"), 5):
+                x, y = get_road_point(car_info['current_road'], "end")
+                print("end")
+                car_info['crossing'] = True
+
+            if road_dict[car_info['current_road']]['direction'] == 'e':
+                x += get_pixel(car_info['speed'])
+            if road_dict[car_info['current_road']]['direction'] == 'w':
+                x -= get_pixel(car_info['speed'])
+            if road_dict[car_info['current_road']]['direction'] == 's':
+                y += get_pixel(car_info['speed'])
+            if road_dict[car_info['current_road']]['direction'] == 'n':
+                y -= get_pixel(car_info['speed'])
 
         car_info['x'] = x
         car_info['y'] = y
@@ -138,6 +156,7 @@ def draw_car():
         else:
             color = BLUE
         pygame.draw.circle(main_display, color, (x, y), 10)
+
 
 road_width = 2
 road_length = 50
@@ -155,9 +174,9 @@ road_dict = {
 }
 
 car_dict = {
-    1: {"x": 0.0, "y": 0.0, "current_road": 0.0, "speed": 0.1, "Route": [4.1, 3.1, 3, 4]},
-    2: {"x": 0.0, "y": 0.0, "current_road": 0.0, "speed": 0.1, "Route": [1.1, 2.1]},
-    3: {"x": 0.0, "y": 0.0, "current_road": 0.0, "speed": 0.1, "Route": [2, 1]},
+    1: {"x": 0.0, "y": 0.0, "crossing": False, "current_road": 0.0, "speed": 0.1, "Route": [4.1, 2.1, 2, 3.1, 3, 4]},
+    # 2: {"x": 0.0, "y": 0.0, "crossing": False, "current_road": 0.0, "speed": 0.1, "Route": [1.1, 2.1]},
+    # 3: {"x": 0.0, "y": 0.0, "crossing": False, "current_road": 0.0, "speed": 0.1, "Route": [2, 1]},
 
 }
 
