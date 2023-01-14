@@ -31,10 +31,10 @@ def run():
         traci.simulationStep()
         print(step)
 
-        det_vehs = traci.inductionloop.getLastStepVehicleIDs("det_0")
-        for veh in det_vehs:
-            print(veh)
-            traci.vehicle.changeLane(veh, 2, 25)
+        # det_vehs = traci.inductionloop.getLastStepVehicleIDs("det_0")
+        # for veh in det_vehs:
+        #     print(veh)
+        #     traci.vehicle.changeLane(veh, 2, 25)
 
         # if step == 100:
         #     traci.vehicle.changeTarget("1", "e9")
@@ -57,6 +57,5 @@ if __name__ == "__main__":
         sumoBinary = checkBinary('sumo-gui')
 
     # traci starts sumo as a subprocess and then this script connects and runs
-    traci.start([sumoBinary, "-c", "scenario_1.sumocfg",
-                             "--scenario_1-output", "scenario_1.xml"])
+    traci.start([sumoBinary, "-c", "scenario_1.sumocfg"]) #, "--scenario_1-output", "scenario_1.xml"])
     run()

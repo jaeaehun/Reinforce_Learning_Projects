@@ -1,4 +1,4 @@
 <configuration>
-    <net-file value="C:\Users\dlwog\Desktop\project\scenario_1.net.xml"/>
-    <route-files value="C:\Users\dlwog\Desktop\project\scenario_1.rou.xml"/>
+    <net-file value="scenario_1.net.xml"/>
+    <route-files value="scenario_1.rou.xml"/>
 </configuration>
