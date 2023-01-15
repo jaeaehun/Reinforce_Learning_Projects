@@ -141,6 +141,8 @@ def draw_car():
                     x = car_info['x']
                     y = car_info['y']
                 else:
+                    # 베지어 곡선으로 교차로에서 교차로로 이동하게 만들기
+
                     print(get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road'])], "end"), get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1], "start"))
                     x += (get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1], "start")[0] - get_road_point(car_info['current_road'], "end")[0]) / 100
                     y += (get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1], "start")[1] - get_road_point(car_info['current_road'], "end")[1]) / 100
@@ -175,6 +177,14 @@ def draw_car():
         else:
             color = BLUE
         pygame.draw.circle(main_display, color, (x, y), get_pixel(car_width / 2))
+        # 자동차를 line으로 그려서 회전 가능하게 하고, 회전축은 뒷바퀴
+        # 자동차가 볼 수 있는 collide box를 만들고, 그 안에 다른 자동차가 보이면 멈춤
+        # 근데 바로 멈추는게 아니라, 관성을 적용시켜서, 제동거리를 만든다.
+        # 제동거리는 자동차의 속도에 비례하게 만든다.
+        # 자동차의 최소 안전거리 collide box를 만들고, 그 안에 다른 자동차가 보이면 멈춤
+        # 그래서 조금의 빈틈이라도 보이면, 바로 끼어들기 시전
+        # 반대 차선의 자동차는 무시하고, 같은 차선 일때만 collide box가 유효
+        # 교차로 안에 있다면, 일단은 교차로 내의 모든 자동차를 포함
 
         # pygame.draw.rect(main_display, color, (x - get_pixel(car_width / 2), y - get_pixel(car_length / 2), get_pixel(car_width), get_pixel(car_length)))
         # car_image = pygame.transform.scale(car_image, (get_pixel(car_width), get_pixel(car_length)))
@@ -216,13 +226,12 @@ road_dict = {
     11.1: {"x": WIDTH/2 - get_pixel(road_length / 2 + road_width), "y": HEIGHT/2 + get_pixel(road_width)/2 + 1 + get_pixel(road_length + road_width * 2), "width": road_width, "length": road_length, "direction": "e"},
     12: {"x": WIDTH/2 + get_pixel(road_length / 2 + road_width), "y": HEIGHT/2 - get_pixel(road_width)/2 - 1 + get_pixel(road_length + road_width * 2), "width": road_width, "length": road_length, "direction": "w"},
     12.1: {"x": WIDTH/2 + get_pixel(road_length / 2 + road_width), "y": HEIGHT/2 + get_pixel(road_width)/2 + 1 + get_pixel(road_length + road_width * 2), "width": road_width, "length": road_length, "direction": "e"},
-
 }
 
 car_dict = {
     1: {"x": 0.0, "y": 0.0, "crossing": False, "current_road": 0.0, "speed": 0.1, "Route": [4.1, 2.1, 5.1, 10, 3, 1, 7.1, 7, 8, 11.1 ]},
-    # 2: {"x": 0.0, "y": 0.0, "crossing": False, "current_road": 0.0, "speed": 0.1, "Route": [1.1, 2.1]},
-    # 3: {"x": 0.0, "y": 0.0, "crossing": False, "current_road": 0.0, "speed": 0.1, "Route": [2, 1]},
+    2: {"x": 0.0, "y": 0.0, "crossing": False, "current_road": 0.0, "speed": 0.1, "Route": [1.1, 2.1]},
+    3: {"x": 0.0, "y": 0.0, "crossing": False, "current_road": 0.0, "speed": 0.1, "Route": [2, 1]},
 }
 
 
@@ -238,9 +247,9 @@ set_car_start_point()
 while True:
     key_event()
     main_display.fill(WHITE)
-
     draw_road()
     draw_car()
+    print("car1: ", car_dict[1]["x"], car_dict[1]["y"])
 
     pygame.display.update()  # 화면을 업데이트한다
     clock.tick(120)  # 화면 표시 회수 설정만큼 루프의 간격을 둔다
