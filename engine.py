@@ -124,6 +124,12 @@ def collide_check(point1, point2, radius):
         return False
 
 
+def bezier_curve(start_point, end_point, control_point, t):
+    x = (1 - t) ** 2 * start_point[0] + 2 * (1 - t) * t * control_point[0] + t ** 2 * end_point[0]
+    y = (1 - t) ** 2 * start_point[1] + 2 * (1 - t) * t * control_point[1] + t ** 2 * end_point[1]
+    return [x, y]
+
+
 def draw_car():
     global car_image
     for car_name, car_info in car_dict.items():
@@ -144,8 +150,10 @@ def draw_car():
                     # 베지어 곡선으로 교차로에서 교차로로 이동하게 만들기
 
                     print(get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road'])], "end"), get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1], "start"))
+
                     x += (get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1], "start")[0] - get_road_point(car_info['current_road'], "end")[0]) / 100
                     y += (get_road_point(car_info['Route'][car_info['Route'].index(car_info['current_road']) + 1], "start")[1] - get_road_point(car_info['current_road'], "end")[1]) / 100
+
             except Exception:
                 x, y = get_road_point(car_info['Route'][0], "start")
                 car_info['current_road'] = car_info['Route'][0]
