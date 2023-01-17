@@ -18,6 +18,7 @@ pygame.display.set_caption("PyGame")
 clock = pygame.time.Clock()
 
 
+
 class Character:
     def __init__(self, x, y, radius, speed):
         self.x = x
@@ -36,35 +37,46 @@ class Character:
         self.x = x
         self.y = y
 
-def select_action(k):
-    luck = random.random()
+def select_action(k, s, g, re):
+    luck = s
+    reward = re
 
-    if luck <0.125:
-        k.move(1,-1)
+    if luck < 0.125:
+        k.move(1, -1)
+        reward -= 1
 
     elif luck < 0.25:
-        k.move(1,0)
+        k.move(1, 0)
+        reward -= 1
 
     elif luck < 0.375:
-        k.move(1,1)
+        k.move(1, 1)
+        reward -= 1
 
     elif luck < 0.5:
-        k.move(0,1)
+        k.move(0, 1)
+        reward -= 1
 
     elif luck < 0.625:
-        k.move(-1,1)
+        k.move(-1, 1)
+        reward -= 1
 
     elif luck < 0.75:
-        k.move(-1,0)
+        k.move(-1, 0)
+        reward -= 1
 
     elif luck < 0.875:
-        k.move(-1,-1)
+        k.move(-1, -1)
+        reward -= 1
 
     else:
         k.move(0,-1)
+        reward -= 1
 
+    if collide_check(k, g) == True:
+        reward -= 100
 
-
+    return reward
 
 class Goal:
     def __init__(self, x, y, radius):
@@ -103,15 +115,16 @@ def distance(x, y):
 class ActorCritic:
     def __init__(self):
         super(ActorCritic, self).__init__()
-        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        #self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         self.loss_lst = []  # loss들을 모아두기 위한 배열
 
-        self.fc1 = nn.linear(2, 256)  # 입력 state 6개
+        self.fc1 = nn.linear(2, 256)  # 입력 state 2개
         self.fc_pi = nn.linear(256, 2)  # POLICY_NETWORK
         self.fc_vel = nn.linear(256, 1)  # value_network
+        model = nn.Linear(1, 1)
 
-        self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)  # 딥러닝 최적화 방식
+        self.optimizer = optim.Adam(model.parameters(), lr = 0.002)  # 딥러닝 최적화 방식
 
     def policy_network(self, x, softmax_dim=0):
         x = F.relu(self.fc1(x))
@@ -119,8 +132,8 @@ class ActorCritic:
         act = F.softmax(x, dim=softmax_dim)  # 가속 또는 감속을 할 확률이 나옴
         return act
 
-    def value_network(self, x, ):
-        x = F.relu(self.fc1)
+    def value_network(self, x):
+        x = F.relu(self.fc1(x))
         value = self.fc_vel(x)  # 현재 state의 상태가치함수가 나옴
 
         return value
@@ -129,13 +142,14 @@ class ActorCritic:
         self.loss_lst.append(loss.unsqueeze(0))  # loss를 모아둔다. unsqueeze(0)는 차원을 높여주는 것
 
     def train(self):
-        loss = torch.cat(self.loss_lst).sum
-        loss = loss / len(self.loss_lsts)  # loss 평균 내주기
+        loss_cat = torch.cat(self.loss_lst).sum
+        loss_mean = loss_cat / len(self.loss_lst)  # loss 평균 내주기
 
         self.optimizer.zero_grad()
-        loss.backward()
+        loss_mean.backward()
         self.optimizer.step()
         self.loss_lst = []
+
 
 
 me = Character(800, 600, 20, 5)
@@ -145,9 +159,12 @@ obstacle_2 = Obstacle(600, 200, 20)
 obstacle_3 = Obstacle(450, 150, 20)
 goal = Goal(400, 100, 20)
 
-#model =ActorCritic()
+model =ActorCritic()
+
+gamma = 0.95
 
 while True:
+
     clock.tick(60)
     screen.fill((0, 0, 0))
 
@@ -168,9 +185,36 @@ while True:
     fuck_3 = collide_check(me, obstacle_3)
 
     data = [dx, dy]
-    state = torch.tensor(data)
 
-    select_action(me)
+    for n in range (10000):
+
+        score = 0
+        reward = 0
+
+        while clear == False or (fuck and fuck_1 and fuck_2 and fuck_3 == True):
+
+            state = torch.tensor(data)
+            probability = model.policy_network(state)
+            value = model.value_network(state)
+            pdf = Categorical(probability)
+            action = pdf.sample()
+            reward = select_action(me, action.item(), goal, reward)
+
+            state_prime = torch.tensor(data)
+            next_value = model.value_network(state_prime)
+            delta = reward + gamma * next_value - value
+            loss = -torch.log(probability) * delta.item() + delta * delta
+
+            model.gather_loss(loss)
+            score += reward
+
+            if clear == True:
+                break
+
+        model.train()
+
+        if n % 20 == 0 and n != 0:
+            print("# of episode :{}, avg score : {:.1f}".format(n, score / 10))
 
 
 
