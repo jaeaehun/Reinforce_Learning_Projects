@@ -75,7 +75,11 @@ def select_action(k, s, g, re):
         reward -= 1
 
     if collide_check(k, g) == True:
-        reward -= 100
+        reward -= 200
+
+    if get_out_check(k) == True:
+        reward -= 10
+        print("fuck")
 
     return reward
 
@@ -164,7 +168,7 @@ class ActorCritic:
         self.loss_lst = []
 
 
-me = Character(800, 600, 20, 5)
+me = Character(800, 600, 20, 800)
 obstacle = Obstacle(400, 300, 20)
 obstacle_1 = Obstacle(200, 150, 20)
 obstacle_2 = Obstacle(600, 200, 20)
@@ -192,12 +196,12 @@ while True:
         me.y = 600
         t=0
 
-        print("in for")
+        #print("in for")
 
         #dx, dy = distance(me, goal)
         data_1 = [[700, 500]]
 
-        while clear or impact or impact_1 or impact_2 or impact_3 or get_out is False:
+        while clear or impact or impact_1 or impact_2 or impact_3 is False:
 
             clock.tick(60)
             screen.fill((0, 0, 0))
@@ -234,7 +238,6 @@ while True:
             pdf = Categorical(probability)
             action = pdf.sample()
             reward = select_action(me, action.item(), goal, reward)
-            # print("reward =", reward)
 
             dx, dy = distance(me, goal)
             data = [[dx, dy]]
@@ -248,7 +251,7 @@ while True:
             score += reward
             # print("score=", score)
 
-            if clear or impact or impact_1 or impact_2 or impact_3 == True:
+            if clear or impact or impact_1 or impact_2 or impact_3  == True:
                 #print("impact")
                 break
 
