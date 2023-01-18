@@ -1,43 +1,165 @@
-'''강화학습_라이브러리_호출'''
+import pygame
+from pygame.locals import *
+import sys  # 외장 모듈
+import math
+import random
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import numpy as np
 from torch.distributions import Categorical
-
-"""---------------------"""
-
-'''게임 호출'''
-import engine
-
-"""--------"""
-
-"""Hyperparameters"""
-learning_rate = 1
-gamma = 1
-n_rollout = 1
-"""---------------"""
+WIDTH = 800
+HEIGHT = 600
+# 초기화
+pygame.init()
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("PyGame")
+clock = pygame.time.Clock()
 
 
-class ACTOR_CRITIC:
+class Character:
+    def __init__(self, x, y, radius, speed):
+        self.x = x
+        self.y = y
+        self.radius = radius
+        self.speed = speed
+
+    def draw(self):
+        pygame.draw.circle(screen, (255, 255, 255), (self.x, self.y), self.radius, 0)
+
+    def move(self, x, y):
+        self.x += x * self.speed
+        self.y += y * self.speed
+
+    def move_to(self, x, y):
+        self.x = x
+        self.y = y
+
+
+def select_action(k, s, g, re,o_1, o_2, o_3, o_4):
+    luck = s
+    reward = re
+
+    if luck == 0:
+        k.move(1, -1)
+        reward -= 1
+
+    elif luck == 1:
+        k.move(1, 0)
+        reward -= 1
+
+    elif luck == 2:
+        k.move(1, 1)
+        reward -= 1
+
+    elif luck == 3:
+        k.move(0, 1)
+        reward -= 1
+
+    elif luck == 4:
+        k.move(-1, 1)
+        reward -= 1
+
+    elif luck == 5:
+        k.move(-1, 0)
+        reward -= 1
+
+    elif luck == 6:
+        k.move(-1, -1)
+        reward -= 1
+
+    else:
+        k.move(0, -1)
+        reward -= 1
+
+    if collide_check(k, g) == True:
+        reward += 5000
+
+    if collide_check(k, g) == True:
+        reward -= 500
+
+    if collide_check(k, o_1) == True:
+        reward -= 500
+
+    if collide_check(k, o_2) == True:
+        reward -= 500
+
+    if collide_check(k, o_3) == True:
+        reward -= 500
+
+    if get_out_check(o_4) == True:
+        reward -= 10
+        print("fuck")
+
+    return reward
+
+
+class Goal:
+    def __init__(self, x, y, radius):
+        self.x = x
+        self.y = y
+        self.radius = radius
+
+    def draw(self):
+        pygame.draw.circle(screen, (255, 0, 0), (self.x, self.y), self.radius, 0)
+
+
+class Obstacle:
+    def __init__(self, x, y, radius):
+        self.x = x
+        self.y = y
+        self.radius = radius
+
+    def draw(self):
+        pygame.draw.circle(screen, (0, 255, 0), (self.x, self.y), self.radius, 0)
+
+
+def collide_check(character, goal):
+    distance = math.sqrt((character.x - goal.x) ** 2 + (character.y - goal.y) ** 2)
+    if distance < character.radius + goal.radius:
+        return True
+    else:
+        return False
+
+
+def get_out_check(k):
+    if k.x > WIDTH or k.x < 0 or k.y > HEIGHT or k.y < 0:
+        return True
+    else:
+        return False
+
+
+def distance(x, y):
+    dx = x.x - y.x
+    dy = x.y - y.y
+
+    return dx, dy
+
+
+class ActorCritic:
     def __init__(self):
-        super(ACTOR_CRITIC, self).__init__()
+        super(ActorCritic, self).__init__()
+
         self.loss_lst = []  # loss들을 모아두기 위한 배열
 
-        self.fc1 = nn.linear(6, 256)  # 입력 state 6개
-        self.fc_pi = nn.linear(256, 2)  # POLICY_NETWORK
-        self.fc_vel = nn.linear(256, 1)  # value_network
+        self.fc1 = nn.Linear(2, 128)  # 입력 state 2개
+        self.fc_pi = nn.Linear(128, 8)  # POLICY_NETWORK
+        self.fc_vel = nn.Linear(128, 1)  # value_network
 
-        self.optimizer = optim.Adam(self.parameters(), lr=learning_rate)  # 딥러닝 최적화 방식
+        model = nn.Linear(1, 1)
 
-    def policy_network(self, x, softmax_dim=0):
+        self.optimizer = optim.Adam(model.parameters(), lr = 0.005)  # 딥러닝 최적화 방식
+
+    def policy_network(self, x, softmax_dim=1):
         x = F.relu(self.fc1(x))
         x = self.fc_pi(x)
         act = F.softmax(x, dim=softmax_dim)  # 가속 또는 감속을 할 확률이 나옴
         return act
 
-    def value_network(self, x, ):
-        x = F.relu(self.fc1)
+    def value_network(self, x):
+        x = F.relu(self.fc1(x))
         value = self.fc_vel(x)  # 현재 state의 상태가치함수가 나옴
 
         return value
@@ -46,8 +168,11 @@ class ACTOR_CRITIC:
         self.loss_lst.append(loss.unsqueeze(0))  # loss를 모아둔다. unsqueeze(0)는 차원을 높여주는 것
 
     def train(self):
-        loss = torch.cat(self.loss_lst).sum
-        loss = loss / len(self.loss_lsts)  # loss 평균 내주기
+        #loss = torch.cat(self.loss_lst).sum
+
+        #print(type(loss_cat))
+
+        loss = torch.cat(self.loss_lst).mean() #/ len(self.loss_lst)   loss 평균 내주기
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -55,43 +180,96 @@ class ACTOR_CRITIC:
         self.loss_lst = []
 
 
-class project:
+me = Character(600, 400, 20, 10)
+obstacle = Obstacle(400, 300, 20)
+obstacle_1 = Obstacle(200, 150, 20)
+obstacle_2 = Obstacle(600, 200, 20)
+obstacle_3 = Obstacle(450, 150, 20)
+goal = Goal(100, 100, 20)
 
-    def __init__(self):
-        self.enviroment = engine  # 게임에서 차량(ego, 상대) 위치 numpy 형태로 부르기
-        self.model = ACTOR_CRITIC()
-        self.episode_time = 10000
-        self.print_interval = 10  # 에피소드 10번 끝날때마다 리턴값 출력
-        self.score = 0  # 리턴
+model = ActorCritic()
 
-    def start(self):
+gamma = 0.95
+print(torch.cuda.is_available())
 
-        for n_time in range(self.episode_time):  # "에피소드가 10000번 실행할때까지"
-            while ("사고가 나기전까지 또는 도착지 도착 전까지"):
-                state = torch.tensor(self.enviroment)  # "numpy 형태였던 state를 tensor형태로 바꾸기"
+while True:
+    for n in range (1000):
+        clear = False
+        impact = False
+        impact_1 = False
+        impact_2 = False
+        impact_3 = False
+        get_out = False
 
-                probability = self.model.policy_network(state, 1)  # "policy_network에서 가속, 감속을 할 확률을 받음"
-                value = self.model.value_network(state)  # "상태가치함수를 받음"
 
-                pdf = Categorical(probability)  # "가감속 할 확률을 확률밀도함수로 만듬"
-                action = pdf.sample()  # "확률밀도함수에서 가속이나 감속을 선택하기"
+        score = 0
+        reward = 0
+        me.x = 600
+        me.y = 400
+        t=0
 
-                state, reward, done = engine.move(
-                    action.item())  # "action을 통해 state와 reward가 변한다. done은 사고, 도착지 도착 true false 반환"
-                next_value = self.model.value_network(state)  # "변한 state에 대한 상태가치함수 계산"
+        #print("in for")
 
-                self.score += reward
+        #dx, dy = distance(me, goal)
+        data_1 = [[500, 300]]
 
-                delta = reward + gamma * next_value - value  # "TD 에러 구하기"
-                loss = -torch.log(probability) * delta.item() + delta * delta  # "loss 계산하기"
+        while clear or impact or impact_1 or impact_2 or impact_3 or get_out is False:
 
-                self.model.gather_loss(loss)  # "loss 모으기"
+            clock.tick(60)
+            screen.fill((0, 0, 0))
 
-                if done:
-                    break  # "사고 나거나 도착지 도착하면 while문 탈출하기"
+            clear = collide_check(me, goal)
 
-            self.model.train()  # "위에서 구한 loss로 모델 학습하기"
+            impact = collide_check(me, obstacle)
+            impact_1 = collide_check(me, obstacle_1)
+            impact_2 = collide_check(me, obstacle_2)
+            impact_3 = collide_check(me, obstacle_3)
+            get_out = get_out_check(me)
 
-            if n_time % self.print_interval == 0 and n_time != 0:
-                print("# of episode :{}, avg score : {:.1f}".format(n_time, score / print_interval))
-                self.score = 0
+            me.draw()
+            obstacle.draw()
+            obstacle_1.draw()
+            obstacle_2.draw()
+            obstacle_3.draw()
+            goal.draw()
+
+            for event in pygame.event.get():
+                if n == 1000:
+                    pygame.quit()
+                    sys.exit()
+
+            if me.x == 800 and me.y == 600 and t ==0:
+                    state = torch.tensor(data_1).float()
+                    t += 1
+            else:
+                state = torch.tensor(data).float()
+
+            probability = model.policy_network(state)
+            value = model.value_network(state)
+
+            pdf = Categorical(probability)
+            action = pdf.sample()
+            reward = select_action(me, action.item(), goal, reward, obstacle, obstacle_1, obstacle_2, obstacle_3)
+
+            dx, dy = distance(me, goal)
+            data = [[dx, dy]]
+
+            state_prime = torch.tensor(data).float()
+            next_value = model.value_network(state_prime)
+            delta = reward + gamma * next_value - value
+            loss = -torch.log(probability) * delta.item() + delta * delta
+
+            model.gather_loss(loss)
+            score += reward
+            # print("score=", score)
+
+            if clear or impact or impact_1 or impact_2 or impact_3 == True:
+
+                break
+
+            pygame.display.update()
+
+        model.train()
+
+        if n % 20 == 0 and n != 0:
+            print("# of episode :{}, avg score : {:.1f}".format(n, score / 10))
