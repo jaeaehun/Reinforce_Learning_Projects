@@ -159,11 +159,12 @@ obstacle = Obstacle(400, 300, 20)
 obstacle_1 = Obstacle(200, 150, 20)
 obstacle_2 = Obstacle(600, 200, 20)
 obstacle_3 = Obstacle(450, 150, 20)
-goal = Goal(780, 620, 20)
+goal = Goal(100, 100, 20)
 
 model = ActorCritic()
 
 gamma = 0.95
+print(torch.cuda.is_available())
 
 while True:
 
@@ -198,7 +199,7 @@ while True:
 
 
         #dx, dy = distance(me, goal)
-        data_1 = [[20, 20]]
+        data_1 = [[700, 500]]
 
         while clear or impact or impact_1 or impact_2 or impact_3 == False:
 
