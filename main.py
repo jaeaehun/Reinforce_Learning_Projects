@@ -142,11 +142,11 @@ class ActorCritic:
         self.loss_lst.append(loss.unsqueeze(0))  # loss를 모아둔다. unsqueeze(0)는 차원을 높여주는 것
 
     def train(self):
-        loss = torch.cat(self.loss_lst).sum
+        #loss = torch.cat(self.loss_lst).sum
 
         #print(type(loss_cat))
 
-        loss = loss / len(self.loss_lst)  # loss 평균 내주기
+        loss = torch.cat(self.loss_lst).mean() #/ len(self.loss_lst)   loss 평균 내주기
 
         self.optimizer.zero_grad()
         loss.backward()
@@ -159,7 +159,7 @@ obstacle = Obstacle(400, 300, 20)
 obstacle_1 = Obstacle(200, 150, 20)
 obstacle_2 = Obstacle(600, 200, 20)
 obstacle_3 = Obstacle(450, 150, 20)
-goal = Goal(550, 120, 20)
+goal = Goal(780, 620, 20)
 
 model = ActorCritic()
 
@@ -198,7 +198,7 @@ while True:
 
 
         #dx, dy = distance(me, goal)
-        data_1 = [[250, 480]]
+        data_1 = [[20, 20]]
 
         while clear or impact or impact_1 or impact_2 or impact_3 == False:
 
@@ -230,7 +230,7 @@ while True:
             #print("score=", score)
 
             if clear or impact or impact_1 or impact_2 or impact_3 == True:
-                print("impact")
+                #print("impact")
                 break
 
         model.train()
@@ -241,7 +241,8 @@ while True:
         pygame.display.update()
 
     for event in pygame.event.get():
-        if event.type == QUIT:
+        if n == 1000:
             pygame.quit()
             sys.exit()
+
 
