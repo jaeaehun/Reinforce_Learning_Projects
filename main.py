@@ -30,8 +30,8 @@ class Character:
         pygame.draw.circle(screen, (255, 255, 255), (self.x, self.y), self.radius, 0)
 
     def move(self, x, y):
-        self.x += x
-        self.y += y
+        self.x += x * self.speed
+        self.y += y * self.speed
 
     def move_to(self, x, y):
         self.x = x
@@ -168,7 +168,7 @@ class ActorCritic:
         self.loss_lst = []
 
 
-me = Character(800, 600, 20, 800)
+me = Character(800, 600, 20, 1)
 obstacle = Obstacle(400, 300, 20)
 obstacle_1 = Obstacle(200, 150, 20)
 obstacle_2 = Obstacle(600, 200, 20)
