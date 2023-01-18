@@ -167,22 +167,13 @@ gamma = 0.95
 print(torch.cuda.is_available())
 
 while True:
-
-    clock.tick(60)
-    screen.fill((0, 0, 0))
-
-
-
-    clear = collide_check(me, goal)
-
-    impact = collide_check(me, obstacle)
-    impact_1 = collide_check(me, obstacle_1)
-    impact_2 = collide_check(me, obstacle_2)
-    impact_3 = collide_check(me, obstacle_3)
-
-
-
     for n in range (1000):
+        clear = False
+        impact = False
+        impact_1 = False
+        impact_2 = False
+        impact_3 = False
+
 
         score = 0
         reward = 0
@@ -190,18 +181,37 @@ while True:
         me.y = 600
         t=0
 
-        me.draw()
-        obstacle.draw()
-        obstacle_1.draw()
-        obstacle_2.draw()
-        obstacle_3.draw()
-        goal.draw()
+        print("in for")
 
 
         #dx, dy = distance(me, goal)
         data_1 = [[700, 500]]
 
         while clear or impact or impact_1 or impact_2 or impact_3 == False:
+
+            clock.tick(60)
+            screen.fill((0, 0, 0))
+
+            clear = collide_check(me, goal)
+
+            impact = collide_check(me, obstacle)
+            impact_1 = collide_check(me, obstacle_1)
+            impact_2 = collide_check(me, obstacle_2)
+            impact_3 = collide_check(me, obstacle_3)
+
+            me.draw()
+            obstacle.draw()
+            obstacle_1.draw()
+            obstacle_2.draw()
+            obstacle_3.draw()
+            goal.draw()
+
+            for event in pygame.event.get():
+                if n == 1000:
+                    pygame.quit()
+                    sys.exit()
+
+
 
             if me.x == 800 and me.y == 600 and t ==0:
                     state = torch.tensor(data_1).float()
@@ -234,16 +244,15 @@ while True:
                 #print("impact")
                 break
 
+            pygame.display.update()
+
+
         model.train()
 
         if n % 20 == 0 and n != 0:
             print("# of episode :{}, avg score : {:.1f}".format(n, score / 10))
 
-        pygame.display.update()
 
-    for event in pygame.event.get():
-        if n == 1000:
-            pygame.quit()
-            sys.exit()
+
 
 
