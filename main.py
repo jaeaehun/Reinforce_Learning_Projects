@@ -10,13 +10,13 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 from torch.distributions import Categorical
-
+WIDTH = 800
+HEIGHT = 600
 # 초기화
 pygame.init()
-screen = pygame.display.set_mode((800, 600))
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("PyGame")
 clock = pygame.time.Clock()
-
 
 
 class Character:
@@ -36,6 +36,7 @@ class Character:
     def move_to(self, x, y):
         self.x = x
         self.y = y
+
 
 def select_action(k, s, g, re):
     luck = s
@@ -78,6 +79,7 @@ def select_action(k, s, g, re):
 
     return reward
 
+
 class Goal:
     def __init__(self, x, y, radius):
         self.x = x
@@ -104,6 +106,14 @@ def collide_check(character, goal):
         return True
     else:
         return False
+
+
+def get_out_check(k):
+    if k.x > WIDTH or k.x < 0 or k.y > HEIGHT or k.y < 0:
+        return True
+    else:
+        return False
+
 
 def distance(x, y):
     dx = x.x - y.x
@@ -173,6 +183,7 @@ while True:
         impact_1 = False
         impact_2 = False
         impact_3 = False
+        get_out = False
 
 
         score = 0
@@ -183,11 +194,10 @@ while True:
 
         print("in for")
 
-
         #dx, dy = distance(me, goal)
         data_1 = [[700, 500]]
 
-        while clear or impact or impact_1 or impact_2 or impact_3 == False:
+        while clear or impact or impact_1 or impact_2 or impact_3 or get_out is False:
 
             clock.tick(60)
             screen.fill((0, 0, 0))
@@ -198,6 +208,7 @@ while True:
             impact_1 = collide_check(me, obstacle_1)
             impact_2 = collide_check(me, obstacle_2)
             impact_3 = collide_check(me, obstacle_3)
+            get_out = get_out_check(me)
 
             me.draw()
             obstacle.draw()
@@ -211,8 +222,6 @@ while True:
                     pygame.quit()
                     sys.exit()
 
-
-
             if me.x == 800 and me.y == 600 and t ==0:
                     state = torch.tensor(data_1).float()
                     t += 1
@@ -225,8 +234,7 @@ while True:
             pdf = Categorical(probability)
             action = pdf.sample()
             reward = select_action(me, action.item(), goal, reward)
-            #print("reward =", reward)
-
+            # print("reward =", reward)
 
             dx, dy = distance(me, goal)
             data = [[dx, dy]]
@@ -238,7 +246,7 @@ while True:
 
             model.gather_loss(loss)
             score += reward
-            #print("score=", score)
+            # print("score=", score)
 
             if clear or impact or impact_1 or impact_2 or impact_3 == True:
                 #print("impact")
@@ -246,13 +254,7 @@ while True:
 
             pygame.display.update()
 
-
         model.train()
 
         if n % 20 == 0 and n != 0:
             print("# of episode :{}, avg score : {:.1f}".format(n, score / 10))
-
-
-
-
-
