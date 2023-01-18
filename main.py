@@ -18,6 +18,7 @@ pygame.display.set_caption("PyGame")
 clock = pygame.time.Clock()
 
 
+
 class Character:
     def __init__(self, x, y, radius, speed):
         self.x = x
@@ -36,36 +37,35 @@ class Character:
         self.x = x
         self.y = y
 
-
 def select_action(k, s, g, re):
     luck = s
     reward = re
 
-    if luck < 0.125:
+    if luck == 0:
         k.move(1, -1)
         reward -= 1
 
-    elif luck < 0.25:
+    elif luck == 1:
         k.move(1, 0)
         reward -= 1
 
-    elif luck < 0.375:
+    elif luck == 2:
         k.move(1, 1)
         reward -= 1
 
-    elif luck < 0.5:
+    elif luck == 3:
         k.move(0, 1)
         reward -= 1
 
-    elif luck < 0.625:
+    elif luck == 4:
         k.move(-1, 1)
         reward -= 1
 
-    elif luck < 0.75:
+    elif luck == 5:
         k.move(-1, 0)
         reward -= 1
 
-    elif luck < 0.875:
+    elif luck == 6:
         k.move(-1, -1)
         reward -= 1
 
@@ -73,11 +73,10 @@ def select_action(k, s, g, re):
         k.move(0, -1)
         reward -= 1
 
-    if collide_check(k, g):
+    if collide_check(k, g) == True:
         reward -= 100
 
     return reward
-
 
 class Goal:
     def __init__(self, x, y, radius):
@@ -106,7 +105,6 @@ def collide_check(character, goal):
     else:
         return False
 
-
 def distance(x, y):
     dx = x.x - y.x
     dy = x.y - y.y
@@ -117,18 +115,18 @@ def distance(x, y):
 class ActorCritic:
     def __init__(self):
         super(ActorCritic, self).__init__()
-        # self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         self.loss_lst = []  # loss들을 모아두기 위한 배열
 
-        self.fc1 = nn.Linear(2, 256)  # 입력 state 2개
-        self.fc_pi = nn.Linear(256, 2)  # POLICY_NETWORK
-        self.fc_vel = nn.Linear(256, 1)  # value_network
+        self.fc1 = nn.Linear(2, 128)  # 입력 state 2개
+        self.fc_pi = nn.Linear(128, 8)  # POLICY_NETWORK
+        self.fc_vel = nn.Linear(128, 1)  # value_network
+
         model = nn.Linear(1, 1)
 
-        self.optimizer = optim.Adam(model.parameters(), lr=0.002)  # 딥러닝 최적화 방식
+        self.optimizer = optim.Adam(model.parameters(), lr = 0.002)  # 딥러닝 최적화 방식
 
-    def policy_network(self, x, softmax_dim=0):
+    def policy_network(self, x, softmax_dim=1):
         x = F.relu(self.fc1(x))
         x = self.fc_pi(x)
         act = F.softmax(x, dim=softmax_dim)  # 가속 또는 감속을 할 확률이 나옴
@@ -144,11 +142,14 @@ class ActorCritic:
         self.loss_lst.append(loss.unsqueeze(0))  # loss를 모아둔다. unsqueeze(0)는 차원을 높여주는 것
 
     def train(self):
-        loss_cat = torch.cat(self.loss_lst).sum
-        loss_mean = loss_cat / len(self.loss_lst)  # loss 평균 내주기
+        loss = torch.cat(self.loss_lst).sum
+
+        #print(type(loss_cat))
+
+        loss = loss / len(self.loss_lst)  # loss 평균 내주기
 
         self.optimizer.zero_grad()
-        loss_mean.backward()
+        loss.backward()
         self.optimizer.step()
         self.loss_lst = []
 
@@ -158,7 +159,7 @@ obstacle = Obstacle(400, 300, 20)
 obstacle_1 = Obstacle(200, 150, 20)
 obstacle_2 = Obstacle(600, 200, 20)
 obstacle_3 = Obstacle(450, 150, 20)
-goal = Goal(400, 100, 20)
+goal = Goal(550, 120, 20)
 
 model = ActorCritic()
 
@@ -169,47 +170,67 @@ while True:
     clock.tick(60)
     screen.fill((0, 0, 0))
 
-    me.draw()
-    obstacle.draw()
-    obstacle_1.draw()
-    obstacle_2.draw()
-    obstacle_3.draw()
-    goal.draw()
 
-    dx, dy = distance(me, goal)
 
     clear = collide_check(me, goal)
 
-    fuck = collide_check(me, obstacle)
-    fuck_1 = collide_check(me, obstacle_1)
-    fuck_2 = collide_check(me, obstacle_2)
-    fuck_3 = collide_check(me, obstacle_3)
+    impact = collide_check(me, obstacle)
+    impact_1 = collide_check(me, obstacle_1)
+    impact_2 = collide_check(me, obstacle_2)
+    impact_3 = collide_check(me, obstacle_3)
 
-    data = [dx, dy]
 
-    for n in range(10000):
+
+    for n in range (1000):
 
         score = 0
         reward = 0
+        me.x = 800
+        me.y = 600
+        t=0
 
-        while not clear or (fuck and fuck_1 and fuck_2 and fuck_3):
+        me.draw()
+        obstacle.draw()
+        obstacle_1.draw()
+        obstacle_2.draw()
+        obstacle_3.draw()
+        goal.draw()
 
-            state = torch.tensor(data)
+
+        #dx, dy = distance(me, goal)
+        data_1 = [[250, 480]]
+
+        while clear or impact or impact_1 or impact_2 or impact_3 == False:
+
+            if me.x == 800 and me.y == 600 and t ==0:
+                    state = torch.tensor(data_1).float()
+                    t += 1
+            else:
+                state = torch.tensor(data).float()
+
             probability = model.policy_network(state)
             value = model.value_network(state)
+
             pdf = Categorical(probability)
             action = pdf.sample()
             reward = select_action(me, action.item(), goal, reward)
+            #print("reward =", reward)
 
-            state_prime = torch.tensor(data)
+
+            dx, dy = distance(me, goal)
+            data = [[dx, dy]]
+
+            state_prime = torch.tensor(data).float()
             next_value = model.value_network(state_prime)
             delta = reward + gamma * next_value - value
             loss = -torch.log(probability) * delta.item() + delta * delta
 
             model.gather_loss(loss)
             score += reward
+            #print("score=", score)
 
-            if clear:
+            if clear or impact or impact_1 or impact_2 or impact_3 == True:
+                print("impact")
                 break
 
         model.train()
@@ -217,9 +238,10 @@ while True:
         if n % 20 == 0 and n != 0:
             print("# of episode :{}, avg score : {:.1f}".format(n, score / 10))
 
+        pygame.display.update()
+
     for event in pygame.event.get():
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
 
-    pygame.display.update()
