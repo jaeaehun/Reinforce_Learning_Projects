@@ -209,7 +209,7 @@ class ActorCritic:
     def make_batch(self):
         s_lst, a_lst, r_lst, s_prime_lst, done_lst = [], [], [], [], []
         for transition in self.data:
-            state, action, reward, state_prime_prime, done = transition
+            state, action, reward, state_prime, done = transition
             s_lst.append(state)
             a_lst.append([action])
             r_lst.append([reward])
