@@ -94,6 +94,11 @@ def select_action(k, s, g, re,o_1, o_2, o_3, o_4):
     dx, dy = distance(k, g)
     data = [[dx, dy]]
 
+    if dx < 500:
+        reward += 20
+    if dy < 300:
+        reward += 20
+
     return data, reward, done
 
 
@@ -126,7 +131,7 @@ def collide_check(character, goal):
 
 
 def get_out_check(k):
-    if k.x > WIDTH or k.x < 0 or k.y > HEIGHT or k.y < 0:
+    if k.x > WIDTH-50 or k.x < 50 or k.y > HEIGHT-50 or k.y < 50:
         return True
     else:
         return False
@@ -253,7 +258,7 @@ class ActorCritic:
         self.optimizer.step()
 
 
-me = Character(600, 400, 20, 20)
+me = Character(600, 400, 20, 8)
 obstacle = Obstacle(400, 300, 20)
 obstacle_1 = Obstacle(200, 150, 20)
 obstacle_2 = Obstacle(600, 200, 20)
@@ -271,7 +276,7 @@ while True:
 
         num, score, reward, data_1 = env_reset(me)
 
-        while end_episode() is False or score > -800:
+        while end_episode() is False or score > -500000:
 
             clock.tick(60)
             screen.fill((0, 0, 0))
@@ -305,7 +310,7 @@ while True:
 
             pygame.display.update()
 
-        #print("yeah")
+        print("yeah")
         model.train_net()
 
         if n % 20 == 0 and n != 0:
