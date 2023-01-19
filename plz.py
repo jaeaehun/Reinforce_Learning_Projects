@@ -86,7 +86,10 @@ def select_action(k, s, g, re,o_1, o_2, o_3, o_4):
     if collide_check(k, o_3) == True:
         reward -= 500
 
-    if get_out_check(o_4) == True:
+    if collide_check(k, o_4) == True:
+        reward -= 500
+
+    if get_out_check(k) == True:
         reward -= 10
         print("fuck")
 
@@ -94,10 +97,10 @@ def select_action(k, s, g, re,o_1, o_2, o_3, o_4):
     dx, dy = distance(k, g)
     data = [[dx, dy]]
 
-    if dx < 500:
-        reward += 20
+    if dx < 400:
+        reward += 10
     if dy < 300:
-        reward += 20
+        reward += 10
 
     return data, reward, done
 
@@ -140,8 +143,8 @@ def get_out_check(k):
 def distance(x, y):
     dx = x.x - y.x
     dy = x.y - y.y
-
     return dx, dy
+
 
 def env_reset(k):
     k.x = 600
@@ -153,6 +156,7 @@ def env_reset(k):
 
     return num, score, reward, data_1
 
+
 def end_episode():
     clear = collide_check(me, goal)
     impact = collide_check(me, obstacle)
@@ -160,14 +164,11 @@ def end_episode():
     impact_2 = collide_check(me, obstacle_2)
     impact_3 = collide_check(me, obstacle_3)
     get_out = get_out_check(me)
-
-    if clear and impact and impact_1 and impact_2 and impact_3 and get_out == False:
-        ans = False
-        return ans
-
+    if clear or impact or impact_1 or impact_2 or impact_3 or get_out:
+        return True
     else:
-        ans = True
-        return ans
+        return False
+
 
 def draw_env():
     me.draw()
@@ -272,13 +273,12 @@ gamma = 0.95
 suck = 20
 
 while True:
-    for n in range (10000):
-
+    for n in range(10000):
         num, score, reward, data_1 = env_reset(me)
 
-        while end_episode() is False or score > -500000:
+        while not end_episode() and score > -500000:
 
-            clock.tick(60)
+            clock.tick(12000)
             screen.fill((0, 0, 0))
 
             draw_env()
@@ -313,5 +313,4 @@ while True:
         print("yeah")
         model.train_net()
 
-        if n % 20 == 0 and n != 0:
-            print("# of episode :{}, avg score : {:.1f}".format(n, score / 20))
+        print("# of episode :{}, avg score : {:.1f}".format(n, score / 20))
