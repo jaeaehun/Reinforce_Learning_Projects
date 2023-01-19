@@ -2,13 +2,13 @@ import pygame
 from pygame.locals import *
 import sys  # 외장 모듈
 import math
-import random
+
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import numpy as np
+
 from torch.distributions import Categorical
 WIDTH = 800
 HEIGHT = 600
@@ -177,14 +177,13 @@ class ActorCritic:
     def __init__(self):
         super(ActorCritic, self).__init__()
 
-        self.loss_lst = []  # loss들을 모아두기 위한 배열
         self.data = []
 
-        self.fc1 = nn.Linear(2, 128)  # 입력 state 2개
-        self.fc_pi = nn.Linear(128, 8)  # POLICY_NETWORK
-        self.fc_vel = nn.Linear(128, 1)  # value_network
+        self.fc1 = nn.Linear(2, 256)  # 입력 state 2개
+        self.fc_pi = nn.Linear(256, 8)  # POLICY_NETWORK
+        self.fc_vel = nn.Linear(256, 1)  # value_network
 
-        model = nn.Linear(20, 10)
+        model = nn.Linear(1, 1)
 
         self.optimizer = optim.Adam(model.parameters(), lr = 0.0001)  # 딥러닝 최적화 방식
 
@@ -192,6 +191,7 @@ class ActorCritic:
         x = F.relu(self.fc1(x))
         x = self.fc_pi(x)
         act = F.softmax(x, dim=softmax_dim)  # 가속 또는 감속을 할 확률이 나옴
+        #print("why=", act)
         return act
 
     def value_network(self, x):
@@ -200,20 +200,21 @@ class ActorCritic:
 
         return value
 
-    def gather_loss(self, loss):
-        self.loss_lst.append(loss.unsqueeze(0))  # loss를 모아둔다. unsqueeze(0)는 차원을 높여주는 것
+    #def gather_loss(self, loss):
+        #self.loss_lst.append(loss.unsqueeze(0))  # loss를 모아둔다. unsqueeze(0)는 차원을 높여주는 것
 
     def gather_data(self, transition):
+
         self.data.append(transition)
 
     def make_batch(self):
         s_lst, a_lst, r_lst, s_prime_lst, done_lst = [], [], [], [], []
         for transition in self.data:
-            state, action, reward, state_prime, done = transition
-            s_lst.append(state)
-            a_lst.append([action])
-            r_lst.append([reward])
-            s_prime_lst.append(state_prime)
+            s, a, r, s_prime, done = transition
+            s_lst.append(s)
+            a_lst.append([a])
+            r_lst.append([r])
+            s_prime_lst.append(s_prime)
             done_mask = 0.0 if done else 1.0
             done_lst.append([done_mask])
 
@@ -223,6 +224,12 @@ class ActorCritic:
             s_prime_lst, dtype=torch.float), \
                                                                torch.tensor(done_lst, dtype=torch.float)
         self.data = []
+        #print("s =", len(s_batch))
+        #print("a =", len(a_batch))
+        #print("r =", len(r_batch))
+        #print("s_p =", len(s_prime_batch))
+        #print("d =", len(done_batch))
+
         return s_batch, a_batch, r_batch, s_prime_batch, done_batch
 
     def train_net(self):
@@ -231,11 +238,15 @@ class ActorCritic:
         delta = td_target - self.value_network(s)
 
         pi = self.policy_network(s, softmax_dim=1)
+        #print("fuck =", pi.dim())
+        #print("ass= ", pi.dtype)
+        #print("dmfwls= ", pi)
         pi_a = pi.gather(1, a)
+        #print("suck =", pi_a.dim())
         loss = -torch.log(pi_a) * delta.detach() + F.smooth_l1_loss(self.value_network(s), td_target.detach())
 
         self.optimizer.zero_grad()
-        loss.mean().backward()
+        loss.backward()
         self.optimizer.step()
 
 
@@ -249,14 +260,15 @@ goal = Goal(100, 100, 20)
 model = ActorCritic()
 
 gamma = 0.95
-print(torch.cuda.is_available())
+#print(torch.cuda.is_available())
+suck = 20
 
 while True:
     for n in range (10000):
 
         num, score, reward, data_1 = env_reset(me)
 
-        while end_episode() is False or score > -200:
+        while end_episode() is False or score > -800:
 
             clock.tick(60)
             screen.fill((0, 0, 0))
@@ -277,21 +289,21 @@ while True:
                 #state = torch.tensor(data).float()
                 state = state_prime
                 model.policy_network(torch.tensor(state).float())
+                #print("long =", model.policy_network(torch.tensor(state).float()))
 
             pdf = Categorical(probability)
             action = pdf.sample().item()
+            #print("action =", action)
             state_prime, reward, done = select_action(me, action, goal, reward, obstacle, obstacle_1, obstacle_2, obstacle_3)
+
+            model.gather_data((state, action, reward, state_prime, done))
 
             score += reward
 
-            #if done == True:
-                #("episode end")
-                #break
-
             pygame.display.update()
 
-        print("yeah")
+        #print("yeah")
         model.train_net()
 
         if n % 20 == 0 and n != 0:
-            print("# of episode :{}, avg score : {:.1f}".format(n, score / 10))
+            print("# of episode :{}, avg score : {:.1f}".format(n, score / 20))
