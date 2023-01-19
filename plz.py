@@ -187,7 +187,7 @@ class ActorCritic:
 
         self.optimizer = optim.Adam(model.parameters(), lr = 0.0001)  # 딥러닝 최적화 방식
 
-    def policy_network(self, x, softmax_dim=1):
+    def policy_network(self, x, softmax_dim=0):
         x = F.relu(self.fc1(x))
         x = self.fc_pi(x)
         act = F.softmax(x, dim=softmax_dim)  # 가속 또는 감속을 할 확률이 나옴
@@ -213,7 +213,7 @@ class ActorCritic:
             s, a, r, s_prime, done = transition
             s_lst.append(s)
             a_lst.append([a])
-            r_lst.append([r])
+            r_lst.append([r/100])
             s_prime_lst.append(s_prime)
             done_mask = 0.0 if done else 1.0
             done_lst.append([done_mask])
@@ -234,19 +234,22 @@ class ActorCritic:
 
     def train_net(self):
         s, a, r, s_prime, done = self.make_batch()
+        #print("d=", done)
         td_target = r + gamma * self.value_network(s_prime) * done
         delta = td_target - self.value_network(s)
 
-        pi = self.policy_network(s, softmax_dim=1)
+        pi = self.policy_network(s, softmax_dim=1).squeeze()
         #print("fuck =", pi.dim())
         #print("ass= ", pi.dtype)
         #print("dmfwls= ", pi)
         pi_a = pi.gather(1, a)
         #print("suck =", pi_a.dim())
-        loss = -torch.log(pi_a) * delta.detach() + F.smooth_l1_loss(self.value_network(s), td_target.detach())
+        loss = -torch.log(pi_a) * delta.detach() + delta*delta #F.smooth_l1_loss(self.value_network(s), td_target.detach())
+
+        #print(loss)
 
         self.optimizer.zero_grad()
-        loss.backward()
+        loss.mean().backward()
         self.optimizer.step()
 
 
