@@ -75,6 +75,7 @@ def select_action(k, s, g, re,o_1, o_2, o_3, o_4):
         reward -= 1
 
     if collide_check(k, g) == True:
+        print("success")
         reward += 5000
 
     if collide_check(k, o_1) == True:
@@ -96,11 +97,6 @@ def select_action(k, s, g, re,o_1, o_2, o_3, o_4):
     done = end_episode()
     dx, dy = distance(k, g)
     data = [[dx, dy]]
-
-    if dx < 400:
-        reward += 10
-    if dy < 300:
-        reward += 10
 
     return data, reward, done
 
@@ -197,7 +193,7 @@ class ActorCritic:
         x = F.relu(self.fc1(x))
         x = self.fc_pi(x)
         act = F.softmax(x, dim=softmax_dim)  # 가속 또는 감속을 할 확률이 나옴
-        #print("why=", act)
+        #print("why=", act.sum())
         return act
 
     def value_network(self, x):
@@ -240,7 +236,7 @@ class ActorCritic:
 
     def train_net(self):
         s, a, r, s_prime, done = self.make_batch()
-        #print("d=", done)
+        #print("a=", a)
         td_target = r + gamma * self.value_network(s_prime) * done
         delta = td_target - self.value_network(s)
 
@@ -249,10 +245,10 @@ class ActorCritic:
         #print("ass= ", pi.dtype)
         #print("dmfwls= ", pi)
         pi_a = pi.gather(1, a)
-        #print("suck =", pi_a.dim())
+        #print("pi_a =", pi_a)
         loss = -torch.log(pi_a) * delta.detach() + delta*delta #F.smooth_l1_loss(self.value_network(s), td_target.detach())
 
-        #print(loss)
+        #print("loss_mean=", loss.mean())
 
         self.optimizer.zero_grad()
         loss.mean().backward()
@@ -270,7 +266,6 @@ model = ActorCritic()
 
 gamma = 0.95
 #print(torch.cuda.is_available())
-suck = 20
 
 while True:
     for n in range(10000):
@@ -289,19 +284,22 @@ while True:
                     sys.exit()
 
             if me.x == 600 and me.y == 400 and num == 0:
-                    #state = torch.tensor(data_1).float()
                     state = data_1
                     probability = model.policy_network(torch.tensor(state).float())
+                    print("pro =", probability)
+                    print("SUM =", probability.sum())
                     num += 1
             else:
                 #state = torch.tensor(data).float()
                 state = state_prime
-                model.policy_network(torch.tensor(state).float())
-                #print("long =", model.policy_network(torch.tensor(state).float()))
+                probability = model.policy_network(torch.tensor(state).float())
+                print("pro =", probability)
+                print("SUM =", probability.sum())
 
             pdf = Categorical(probability)
+            #print("pdf=", pdf)
             action = pdf.sample().item()
-            #print("action =", action)
+            print("action =", action)
             state_prime, reward, done = select_action(me, action, goal, reward, obstacle, obstacle_1, obstacle_2, obstacle_3)
 
             model.gather_data((state, action, reward, state_prime, done))
@@ -310,7 +308,7 @@ while True:
 
             pygame.display.update()
 
-        print("yeah")
+        print(n+1, "train_start")
         model.train_net()
 
         print("# of episode :{}, avg score : {:.1f}".format(n, score / 20))
