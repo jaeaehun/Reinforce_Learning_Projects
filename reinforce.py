@@ -360,6 +360,7 @@ while True:
             print("out_size=", out.size())
             print("act =", act)
             print("act =", act.size())
+            print("log =", torch.log(out[act]))
             pi.put_data((reward, torch.log(out[act])))
 
             #print(torch.log(out[act]))
