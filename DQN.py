@@ -18,7 +18,7 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("PyGame")
 clock = pygame.time.Clock()
 
-learning_rate = 0.005
+learning_rate = 0.0005
 gamma = 0.98
 buffer_limit = 50000
 batch_size = 32
@@ -49,62 +49,68 @@ def select_action(k, s, g, re, o_1, o_2, o_3, o_4):
 
     if luck == 0:
         k.move(1, -1)
-        reward -= 0.1
+        reward -= 0.0
 
     elif luck == 1:
         k.move(1, 0)
-        reward -= 0.1
+        reward -= 0.0
 
     elif luck == 2:
         k.move(1, 1)
-        reward -= 0.1
+        reward -= 0.0
 
     elif luck == 3:
         k.move(0, 1)
-        reward -= 0.1
+        reward -= 0.0
 
     elif luck == 4:
         k.move(-1, 1)
-        reward -= 0.1
+        reward -= 0.0
 
     elif luck == 5:
         k.move(-1, 0)
-        reward -= 0.1
+        reward += 0.0
 
     elif luck == 6:
         k.move(-1, -1)
-        reward -= 0.1
+        reward += 0.0
 
     else:
         k.move(0, -1)
-        reward -= 0.1
+        reward += 0.0
 
     if collide_check(k, g) == True:
         print("success")
-        reward += 1
+        reward += 10000
 
     if collide_check(k, o_1) == True:
-        reward -= 0.5
+        print("accident")
+        reward -= 500
 
     if collide_check(k, o_2) == True:
-        reward -= 0.5
+        print("accident")
+        reward -= 500
 
     if collide_check(k, o_3) == True:
-        reward -= 0.5
+        print("accident")
+        reward -= 500
 
     if collide_check(k, o_4) == True:
-        reward -= 0.5
+        print("accident")
+        reward -= 500
 
     if get_out_check(k) == True:
-        reward -= 0.5
+        print("out")
+        reward -= 1000
 
 
     done = end_episode()
 
-    data = [[distance(k, g), distance(k, o_1), distance(k, o_2), distance(k, o_3), distance(k, o_4)]]
+    #data = [distance(k, g), distance(k, o_1), distance(k, o_2), distance(k, o_3), distance(k, o_4)]
     dx = k.x - g.x
     dy = k.y - g.y
     #data = [[dx, dy]]
+    data = [k.x-g.x, k.y-g.y, k.x-o_1.x, k.y-o_1.y, k.x-o_2.x, k.y-o_2.y, k.x-o_3.x, k.y-o_3.y, k.x-o_4.x, k.x-o_4.y]
 
     return data, reward, done
 
@@ -129,7 +135,7 @@ class Obstacle:
         pygame.draw.circle(screen, (0, 255, 0), (self.x, self.y), self.radius, 0)
 
 
-class ReplayBuffer():
+class ReplayBuffer:
     def __init__(self):
         self.buffer = collections.deque(maxlen = buffer_limit)
 
@@ -158,7 +164,7 @@ class Qnet(nn.Module):
     def __init__(self):
         super(Qnet, self).__init__()
 
-        self.fc1 = nn.Linear(5, 256)  # 입력 state 2개
+        self.fc1 = nn.Linear(10, 256)  # 입력 state 2개
         self.fc2 = nn.Linear(256, 256)  # POLICY_NETWORK
         self.fc3 = nn.Linear(256, 8)  # value_network
 
@@ -177,17 +183,16 @@ class Qnet(nn.Module):
         else:
             return out.argmax().item()
 
-def train(q, q_target, memory, optimizer):
+
+def train(q, q_target, memory, optimizer, batch_size):
     for i in range(10):
         s, a, r, s_prime, done_mask = memory.sample(batch_size)
 
         q_out = q(s)
-
-        print("q_out =", q_out.size())
-        print("a=", a.size())
-
         q_a = torch.gather(q_out, 1, a)
-        max_q_prime = q_target(s_prime).max(1)(0).unsqueeze(1)
+
+        #max_q_prime = q_target(s_prime).max(1)(0).unsqueeze(1)
+        max_q_prime = torch.max(q_target(s_prime))
         target = r + gamma*max_q_prime*done_mask
         loss = F.smooth_l1_loss(q_a, target)
 
@@ -214,8 +219,8 @@ def get_out_check(k):
 def distance(x, y):
     dx = x.x - y.x
     dy = x.y - y.y
-    dis = math.sqrt(dx ** 2 + dy ** 2)
-    return dis
+    #dis = math.sqrt(dx ** 2 + dy ** 2)
+    return (dx, dy)
 
 
 def env_reset(k):
@@ -224,8 +229,8 @@ def env_reset(k):
     num = 0
     score = 0
     reward = 0
-    data_1 = [[math.sqrt(300 ** 2 + 300 ** 2), math.sqrt(200 ** 2 + 100 ** 2), math.sqrt(400 ** 2 + 250 ** 2), 200, math.sqrt(150 ** 2 + 250 ** 2)]]
-    #data_1 = [(500, 300)]
+    #data_1 = [math.sqrt(300 ** 2 + 300 ** 2), math.sqrt(200 ** 2 + 100 ** 2), math.sqrt(400 ** 2 + 250 ** 2), 200, math.sqrt(150 ** 2 + 250 ** 2)]
+    data_1 = [300, 300, 200, 100, 400, 250, 0 , 200, 150, 250]
 
     return num, score, reward, data_1
 
@@ -252,7 +257,7 @@ def draw_env():
     goal.draw()
 
 
-me = Character(600, 400, 20, 3)
+me = Character(600, 400, 20, 1)
 obstacle = Obstacle(400, 300, 20)
 obstacle_1 = Obstacle(200, 150, 20)
 obstacle_2 = Obstacle(600, 200, 20)
@@ -261,7 +266,7 @@ goal = Goal(300, 100, 20)
 
 
 while True:
-    for n_epi in range(10000):
+    for n_epi in range(100000):
 
         q = Qnet()
         q_target = Qnet()
@@ -277,7 +282,7 @@ while True:
 
         while not end_episode():
 
-            clock.tick(1200)
+            clock.tick(12000)
             screen.fill((0, 0, 0))
 
             draw_env()
@@ -287,13 +292,16 @@ while True:
                                                       obstacle_3)
 
             done_mask = 0.0 if done else 1.0
-            memory.put((s, a, r/1000.0, s_prime, done_mask))
+            memory.put((s, a, r/100.0, s_prime, done_mask))
             s = s_prime
+            #print("reward =", r)
             score += r
+            #print("score =", score)
+            print("memory_size =", memory.size())
 
-            if memory.size() > 200:
-                print("train_start")
-                train(q, q_target, memory, optimizer)
+            if memory.size() > 100:
+                #print("train_start")
+                train(q, q_target, memory, optimizer, batch_size)
 
             if n_epi % print_interval == 0 and n_epi != 0:
                 q_target.load_state_dict(q.state_dict())
