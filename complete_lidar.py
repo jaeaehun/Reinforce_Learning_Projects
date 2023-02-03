@@ -179,22 +179,6 @@ class Enviroment:
 
             return reward
 
-    def nerd(self, num, x, y):
-        global reward
-        if num >= 500:
-            if math.sqrt(x**2 + y**2) < 3:
-                #print("i'm nerd")
-                reward = -1000
-            
-            return reward, True
-
-        else:
-
-            reward = 0
-
-            return reward, False
-
-
     def re_goal_pos(self, past_num, current_num):
 
         if past_num == current_num:
@@ -269,7 +253,7 @@ class Agent:
     def __init__(self) -> None:
         pass
 
-    def action(self, num):
+    def action(self, num, goal_x, goal_y):
 
         if num == 0:
             left1.setVelocity(5.0)
@@ -290,6 +274,41 @@ class Agent:
         elif num == 4:
             left1.setVelocity(0.0)
             right1.setVelocity(0.0)
+
+
+        nxt_car_x, nxt_car_y = env.car_position()
+        _, _, next_yaw = imu.getRollPitchYaw()
+        next_dis, next_robot_angle = env.distance(nxt_car_x, nxt_car_y, goal_x, goal_y)
+        next_obs, next_angle = env.point_cloud(lidar_point, len(lidar_point))
+        next_dif_angle = abs(next_robot_angle - next_yaw)
+
+        goal = env.goal_check(next_dis)
+
+        if goal == True and step_finish == False:
+
+            new_goal_pos = random.randrange(0, 8)
+            new_goal_num = env.re_goal_pos(goal_num, new_goal_pos)
+            goal_x, goal_y = env.goal_position(new_goal_num)
+            goal == False
+
+        _, collide = env.collision(next_obs)
+
+        if collide == True:
+            env.prepare_episode()
+
+        goal_distance_reward = env.goal_dis_reward(distance, next_dis)
+        angle_reward = env.goal_angle_reward(robot_angle, yaw)
+        obstacle_distance_reward = env.obs_dis_reward(obstacle_distance, next_obs)
+        goal_reward, _ = env.goal_check(next_dis)
+        collision_reward, _ = env.collision(next_obs)
+
+        done = env.done_mask(step_finish, collide)
+        done_num = 0.0 if done else 1.0
+
+        total_reward = goal_distance_reward*angle_reward + obstacle_distance_reward + goal_reward + collision_reward 
+
+
+        return (next_dis, next_dif_angle, next_obs, next_angle), total_reward, done_num
 
     def sample_action(self, obs, epsilon):
 
@@ -368,7 +387,6 @@ class ReplayBuffer:
         return len(self.buffer)
 
 
-
 best_score = 0
 
 for n_epi in range(itteration):
@@ -410,56 +428,15 @@ for n_epi in range(itteration):
         dif_angle = abs(robot_angle - yaw)
 
         state = (distance, dif_angle, obstacle_distance, obstacle_angle)
-        print("dis = {}, dif_angle = {}, obs_dis = {}, obs_angle".format(distance, dif_angle, obstacle_distance,obstacle_angle))
 
         select_action = car.sample_action(torch.tensor(state).float(), epsilon)
-        action_lst.append(select_action)
 
-        action = car.action(select_action)        
+        state_prime, total_reward, done_num = car.action(select_action, goal_x, goal_y)        
 
-        nxt_car_x, nxt_car_y = env.car_position()
-        _, _, next_yaw = imu.getRollPitchYaw()
-        next_dis, next_robot_angle = env.distance(nxt_car_x, nxt_car_y, goal_x, goal_y)
-        next_obs, next_angle = env.point_cloud(lidar_point, len(lidar_point))
-        next_dif_angle = abs(next_robot_angle - next_yaw)
-
-        state_prime = (next_dis, next_dif_angle, next_obs, next_angle)
-        print("nx_dis = {}, nx_dif_angle = {}, nx_obs_dis = {}, nx_obs_angle".format(next_dis, next_dif_angle, next_obs, next_angle))
-        print("x = {}, y = {}, z = {}, w = {}".format(distance - next_dis, dif_angle-next_dif_angle,obstacle_distance-next_obs, obstacle_angle-next_angle))
-
-        _, goal = env.goal_check(next_dis)
-
-        if goal == True and step_finish == False:
-
-            new_goal_pos = random.randrange(0, 8)
-            new_goal_num = env.re_goal_pos(goal_num, new_goal_pos)
-            goal_x, goal_y = env.goal_position(new_goal_num)
-            goal == False
-
-        _, collide = env.collision(next_obs)
-
-        if collide == True:
-            env.prepare_episode()
-
-        goal_distance_reward = env.goal_dis_reward(distance, next_dis)
-        angle_reward = env.goal_angle_reward(robot_angle, yaw)
-        obstacle_distance_reward = env.obs_dis_reward(obstacle_distance, next_obs)
-        goal_reward, _ = env.goal_check(next_dis)
-        collision_reward, _ = env.collision(next_obs)
-        nerd_reward, nerd = env.nerd(len(action_lst), car_x, car_y)
-        if nerd == True:
-            action_lst = []
-
-        #print("ANGLE: {}, YAW: {}, DIF: {}".format(next_robot_angle, next_yaw, next_dif_angle))
-
-        total_reward = goal_distance_reward*angle_reward + obstacle_distance_reward + goal_reward + collision_reward + nerd_reward
-        #print("goal_dis_reward= {}, goal_angle_reward = {}, goal_reward = {}, obstacle_reward ={}, collision_reward = {}, nerd_reward ={}".format(goal_distance_reward,angle_reward, goal_reward, obstacle_distance_reward, collision_reward, nerd_reward))
-
+        print("state =", state)
+        print("state_prime =", state_prime)
         score += total_reward
         step += 1
-
-        done = env.done_mask(step_finish, collide)
-        done_num = 0.0 if done else 1.0
 
         memory.put((state, select_action, reward*0.01, state_prime, done_num))
 
@@ -480,4 +457,3 @@ for n_epi in range(itteration):
             
     plt.plot(episode_lst, score_lst)
     print("# of episode :{}, score : {:.1f}".format(n_epi+1, score))
-
