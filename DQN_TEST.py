@@ -615,7 +615,7 @@ for n_epi in range(itteration):
 
     if len(collision_count_lst)+len(goal_count_lst) !=0:
         if len(goal_count_lst)*100/(len(collision_count_lst)+len(goal_count_lst)) >90 or n_epi % 2 ==0:
-    
+            with torch.no_grad():
             print("save_trained_parameter")
             path = '/home/jaehun/DQN_network'
             torch.save(q, path + 'model.pt')
