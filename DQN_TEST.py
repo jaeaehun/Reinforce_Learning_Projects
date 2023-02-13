@@ -11,10 +11,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from matplotlib import pyplot as plt
 import numpy as np
-from tensorboardX import SummaryWriter
-summary = SummaryWriter()
 
-writer = SummaryWriter(logdir='DQN')
 loss_maen_lst = []
 
 robot = Supervisor()
@@ -45,9 +42,9 @@ lidar.enablePointCloud()
 imu = robot.getDevice('inertial unit')
 imu.enable(timestep)
 
-learning_rate = 0.0001
+learning_rate = 0.001
 gamma = 0.98
-buffer_limit = 3000000
+buffer_limit = 300000
 batch_size = 128
 itteration = 1000000
 
@@ -616,9 +613,9 @@ for n_epi in range(itteration):
     if len(collision_count_lst)+len(goal_count_lst) !=0:
         if len(goal_count_lst)*100/(len(collision_count_lst)+len(goal_count_lst)) >90 or n_epi % 2 ==0:
             with torch.no_grad():
-            print("save_trained_parameter")
-            path = '/home/jaehun/DQN_network'
-            torch.save(q, path + 'model.pt')
+                print("save_trained_parameter")
+                path = '/home/jaehun/DQN_network'
+                torch.save(q, path + 'model.pt')
         
 
     if score > best_score:
