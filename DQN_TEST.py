@@ -20,7 +20,7 @@ loss_maen_lst = []
 robot = Supervisor()
 timestep = int(robot.getBasicTimeStep())
 
-timetime = 64
+timetime = 32
 
 robot_node = robot.getFromDef('car')
 if robot_node is None:
@@ -45,10 +45,10 @@ lidar.enablePointCloud()
 imu = robot.getDevice('inertial unit')
 imu.enable(timestep)
 
-learning_rate = 0.0001
+learning_rate = 0.00025
 gamma = 0.98
 buffer_limit = 500000
-batch_size = 128
+batch_size = 64
 itteration = 1000000
 
 start_time = robot.getTime()
@@ -144,7 +144,7 @@ class Enviroment:
 
         if distance < 0.71 and n == 0:
             print("goal")
-            reward = 500
+            reward = 200
             n = 1
 
             return reward, True, n
@@ -162,12 +162,12 @@ class Enviroment:
         if dis1< 0.3 and n == 0:
             #print("collision")
             n = 1
-            reward = -300
+            reward = -100
 
             return reward, True, n
 
         else:
-            reward = 0.1            
+            reward = 0.0          
             n = 0
             return reward, False, n
             
@@ -176,17 +176,40 @@ class Enviroment:
         #print("dis1 = {}, dis2 = {}, dis3 = {}".format(dis1, dis2, dis2/dis1))
 
         #print("dis1 = ", dis1)
-        if dis2/dis1 < 1:
+        if dis1 - dis2 > 0.0005:
             #print("distance reward positive")
-            reward = 10-9*dis2/dis1
+            reward = 1
             
             return reward
 
         else:
             #print("distance reward negative")
-            reward = 1
+            reward = -4
 
             return reward
+
+    def safe_reward(self, obs1, obs2):
+        global reward
+        #print("obs1 = {}, obs2 = {}".format(obs1, obs2))
+        safe_dis = 1
+
+        if obs1 >= safe_dis:
+            if obs2 >= safe_dis:
+            # S → S
+                return 2
+            else:
+            # S → NS
+                return -5
+        else:
+            if obs2 >= safe_dis:
+            # NS → S
+                return 5
+            else:
+            # NS → NS
+                if obs2 < obs1:
+                    return -10
+                else:
+                    return 0
 
     def goal_angle_reward(self, target_angle):
 
@@ -224,56 +247,56 @@ class Enviroment:
 
         if num == 0:
 
-            x = 2#-2.5
-            y = 2#3.5
+            x = 4.5#-2.5
+            y = 4.5#3.5
 
             return x, y
 
         elif num == 1:
 
-            x = 1#-5
-            y = 4#0
+            x = 0#-5
+            y = 4.5#0
 
             return x, y
 
         elif num == 2:
 
-            x = -1#-1.5
-            y = 4#-4
+            x = -4.5#-1.5
+            y = 4.5#-4
 
             return x, y
 
         elif num == 3:
 
-            x = -2#3
-            y = 2#-4.5
+            x = -4.5#3
+            y = 0#-4.5
 
             return x, y
 
         elif num == 4:
 
-            x = -5#3.25
-            y = 3#1.5
+            x = -4.5#3.25
+            y = -4.5#1.5
 
             return x, y
 
         elif num == 5:
 
-            x = 5#3
-            y = 3#4
+            x = 0#3
+            y = -4.5#4
 
             return x, y
 
         elif num == 6:
 
-            x = -2#-0.5
-            y = -2#5
+            x = 4.5#-0.5
+            y = -4.5#5
 
             return x, y
 
         else:
-            x = 2 #5.25
-            y = -3#5.25
+            x = 4.5#5.25
+            y = 0#5.25
 
             return x, y
 
@@ -309,49 +332,49 @@ class Agent:
     def __init__(self) -> None:
         pass
 
-    def action(self, num, goal_x, goal_y, count_g, count_c, init_dis):
+    def action(self, num, goal_x, goal_y, count_g, count_c, init_dis, min_dis_0):
         
         if num == 0: # 0.75 m/s
-            left1.setVelocity(5.0)
-            right1.setVelocity(5.0)
-            left2.setVelocity(5.0)
-            right2.setVelocity(5.0)
+            left1.setVelocity(7.67)
+            right1.setVelocity(7.67)
+            left2.setVelocity(7.67)
+            right2.setVelocity(7.67)
 
         elif num == 1: # 1.5 rad/s
-            left1.setVelocity(5.0) 
-            right1.setVelocity(10.0)
-            left2.setVelocity(5.0)
-            right2.setVelocity(10.0)
+            left1.setVelocity(5.33) 
+            right1.setVelocity(8.67)
+            left2.setVelocity(5.33)
+            right2.setVelocity(8.67)
 
         elif num == 2: # 1.5 rad/s
-            left1.setVelocity(10.0)
-            right1.setVelocity(5.0)
-            left2.setVelocity(10.0)
-            right2.setVelocity(5.0)
+            left1.setVelocity(8.67)
+            right1.setVelocity(5.33)
+            left2.setVelocity(8.67)
+            right2.setVelocity(5.33)
 
-        elif num == 3: # 0.6 rad/s
-            left1.setVelocity(5.0)
-            right1.setVelocity(1.8)
-            left2.setVelocity(5.0)
-            right2.setVelocity(1.8)
+        elif num == 3: # 1rad/s
+            left1.setVelocity(4.33)
+            right1.setVelocity(6.67)
+            left2.setVelocity(4.33)
+            right2.setVelocity(6.67)
 
-        elif num == 4: # 0.6 rad/s
-            left1.setVelocity(1.8)
-            right1.setVelocity(5.0)
-            left2.setVelocity(1.8)
-            right2.setVelocity(5.0)
+        elif num == 4: # 1rad/s
+            left1.setVelocity(6.67)
+            right1.setVelocity(4.33)
+            left2.setVelocity(6.67)
+            right2.setVelocity(4.33)
 
-        elif num == 5: # 0.6 rad/s
-            left1.setVelocity(5.0)
-            right1.setVelocity(3.0)
-            left2.setVelocity(5.0)
-            right2.setVelocity(3.0)
+        elif num == 5: # 0.5rad/s
+            left1.setVelocity(3.67)
+            right1.setVelocity(1.33)
+            left2.setVelocity(3.67)
+            right2.setVelocity(1.33)
 
-        elif num == 6: # 0.6 rad/s
-            left1.setVelocity(3.0)
-            right1.setVelocity(5.0)
-            left2.setVelocity(3.0)
-            right2.setVelocity(5.0)
+        elif num == 6: # 0.5 rad/s
+            left1.setVelocity(1.33)
+            right1.setVelocity(3.67)
+            left2.setVelocity(1.33)
+            right2.setVelocity(3.67)
 
         robot.step(timetime)
 
@@ -381,18 +404,20 @@ class Agent:
         done_num = 0.0 if done else 1.0
 
         total_reward = goal_distance_reward * angle_reward + goal_reward + collision_reward + obstacle_distance_reward
+        test_reward = goal_distance_reward + env.safe_reward(min_dis_0,min_dis_1) + goal_reward + collision_reward
         prepare_state_prime = (next_dis, next_robot_angle, min_dis_1, nxt_angle_obs)+tuple(next_lidar_state)
-        state_prime_r = np.round(prepare_state_prime, 3)
+        state_prime_r = np.round(prepare_state_prime, 6)
 
         #print("goal_dis_R = {}, goal_angle_R = {}, obs_dis_R = {}, goal_R = {}, collision_R = {}, TOTAL_REWARD = {}, FINISH? = {}".format(goal_distance_reward, angle_reward,obstacle_distance_reward,goal_reward,collision_reward,total_reward,done_num))
+        #print("goal_dis ={}, safe = {}".format(goal_distance_reward, env.safe_reward(min_dis_0,min_dis_1)))
 
-        return state_prime_r, total_reward, done_num, goal, count_g, collide
+        return state_prime_r, test_reward, done_num, goal, count_g, collide
 
     def sample_action(self, obs, epsilon):
-        q.eval()
-        with torch.no_grad():
+        #q.eval()
+        #with torch.no_grad():
             #print(q.eval())
-            out = q.forward(obs)
+        out = q.forward(obs)
 
         coin = random.random()
 
@@ -424,17 +449,17 @@ class Qnet(nn.Module):
     def forward(self, x):
 
 
-        x = F.leaky_relu(self.fc1(x))
-        x = self.bn1(x)
-        x = self.dropout(x)
+        x = F.relu(self.fc1(x))
+       # x = self.bn1(x)
+        #x = self.dropout(x)
 
-        x = F.leaky_relu(self.fc2(x))
-        x = self.bn2(x)
-        x = self.dropout(x)
+        x = F.relu(self.fc2(x))
+       # x = self.bn2(x)
+       # x = self.dropout(x)
 
-        x = F.leaky_relu(self.fc3(x))
-        x = self.bn3(x)
-        x = self.dropout(x)
+        x = F.relu(self.fc3(x))
+      #  x = self.bn3(x)
+      #  x = self.dropout(x)
 
         x = self.fc5(x)
 
@@ -443,11 +468,11 @@ class Qnet(nn.Module):
 
 
     def study(self, q, q_target, memory, optimizer, batch_size):
-        q.train()
+        #q.train()
         #s, a, r, s_prime, done_mask = memory.sample(batch_size)
         #print("q_target_s_prime=", q_target(s_prime))
         loss_lis = []
-        for i in range(10):
+        for i in range(30):
             s, a, r, s_prime, done_mask = memory.sample(batch_size)
 
             #print("s shape =", s.shape)
@@ -523,7 +548,7 @@ episode_lst = []
 
 for n_epi in range(itteration):
 
-    if n_epi % 20 ==0 and n_epi !=0:
+    if n_epi % 2 ==0 and n_epi !=0:
         print("target_network_update")
         q_target.load_state_dict(q.state_dict())
         
@@ -532,7 +557,7 @@ for n_epi in range(itteration):
     env.prepare_episode()
     goal_num = random.randrange(0, 8)
     goal_x, goal_y = env.goal_position(goal_num)
-    epsilon = max(0.01, 0.20 - 0.01*(n_epi/20))
+    epsilon = max(0.01, 0.50 - 0.01*(n_epi/10))
     collide_count = False
     reward = 0
     score = 0
@@ -557,15 +582,19 @@ for n_epi in range(itteration):
             lidar_state, min_dis, obs_angle = env.point_cloud(lidar_point)
 
             prepare_state= (distance, robot_angle, min_dis, obs_angle) + tuple(lidar_state)
-            state = np.round(prepare_state, 3)
+            state = np.round(prepare_state, 6)
 
-        input = torch.from_numpy(state).float().unsqueeze(0)
+
+        car_x, car_y = env.car_position()
+        dis, robot_angle = env.distance(car_x, car_y, goal_x, goal_y, yaw)    
+
+        input = torch.from_numpy(state).float()#.unsqueeze(0)
         #input.unsqueeze(1)
         #print("input =", input.dim())
         select_action = car.sample_action(input, epsilon)
-
+        _, min_dis, _ = env.point_cloud(lidar_point)
         step += 1
-        state_prime, total_reward, done_num, g_check, count_g, collide_count = car.action(select_action, goal_x, goal_y, count_g, count_c, distance)   
+        state_prime, total_reward, done_num, g_check, count_g, collide_count = car.action(select_action, goal_x, goal_y, count_g, count_c, dis, min_dis)   
         score += total_reward
         
         memory.put((state, select_action, reward, state_prime, done_num))
@@ -600,12 +629,15 @@ for n_epi in range(itteration):
             g_check == False
             car_x, car_y = env.car_position()
             distance, robot_angle = env.distance(car_x, car_y, goal_x, goal_y, yaw)
+            
+    if memory.size() > 2000:
+    
+        print("let's study")
+        q.study(q, q_target, memory, optimizer, batch_size)
 
     episode_lst.append(n_epi+1)
     
-    
-    if memory.size() > 2000:
-        q.study(q, q_target, memory, optimizer, batch_size)
+   
 
     if len(collision_count_lst)+len(goal_count_lst) !=0:
         if len(goal_count_lst)*100/(len(collision_count_lst)+len(goal_count_lst)) >90 or n_epi % 2 ==0:
