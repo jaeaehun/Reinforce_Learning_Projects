@@ -45,7 +45,7 @@ lidar.enablePointCloud()
 imu = robot.getDevice('inertial unit')
 imu.enable(timestep)
 
-learning_rate = 5e-5
+learning_rate = 0.0001
 gamma = 0.98
 buffer_limit = 500000
 batch_size = 128
@@ -175,10 +175,10 @@ class Enviroment:
         global reward
         #print("dis1 = {}, dis2 = {}, dis3 = {}".format(dis1, dis2, dis2/dis1))
 
-        print("dis1 = ", dis1)
+        #print("dis1 = ", dis1)
         if dis2/dis1 < 1:
             #print("distance reward positive")
-            reward = 10*(1-dis2/dis1)
+            reward = 10-9*dis2/dis1
             
             return reward
 
@@ -312,46 +312,46 @@ class Agent:
     def action(self, num, goal_x, goal_y, count_g, count_c, init_dis):
         
         if num == 0: # 0.75 m/s
-            left1.setVelocity(0.0)
-            right1.setVelocity(0.0)
-            left2.setVelocity(0.0)
-            right2.setVelocity(0.0)
+            left1.setVelocity(5.0)
+            right1.setVelocity(5.0)
+            left2.setVelocity(5.0)
+            right2.setVelocity(5.0)
 
         elif num == 1: # 1.5 rad/s
-            left1.setVelocity(0.0) 
-            right1.setVelocity(0.0)
-            left2.setVelocity(0.0)
-            right2.setVelocity(0.0)
+            left1.setVelocity(5.0) 
+            right1.setVelocity(10.0)
+            left2.setVelocity(5.0)
+            right2.setVelocity(10.0)
 
         elif num == 2: # 1.5 rad/s
-            left1.setVelocity(0.0)
-            right1.setVelocity(0.0)
-            left2.setVelocity(0.0)
-            right2.setVelocity(0.0)
+            left1.setVelocity(10.0)
+            right1.setVelocity(5.0)
+            left2.setVelocity(10.0)
+            right2.setVelocity(5.0)
 
         elif num == 3: # 0.6 rad/s
-            left1.setVelocity(0.0)
-            right1.setVelocity(0.0)
-            left2.setVelocity(0.0)
-            right2.setVelocity(0.0)
+            left1.setVelocity(5.0)
+            right1.setVelocity(1.8)
+            left2.setVelocity(5.0)
+            right2.setVelocity(1.8)
 
         elif num == 4: # 0.6 rad/s
-            left1.setVelocity(0.0)
-            right1.setVelocity(0.0)
-            left2.setVelocity(0.0)
-            right2.setVelocity(0.0)
+            left1.setVelocity(1.8)
+            right1.setVelocity(5.0)
+            left2.setVelocity(1.8)
+            right2.setVelocity(5.0)
 
         elif num == 5: # 0.6 rad/s
-            left1.setVelocity(0.0)
-            right1.setVelocity(0.0)
-            left2.setVelocity(0.0)
-            right2.setVelocity(0.0)
+            left1.setVelocity(5.0)
+            right1.setVelocity(3.0)
+            left2.setVelocity(5.0)
+            right2.setVelocity(3.0)
 
         elif num == 6: # 0.6 rad/s
-            left1.setVelocity(0.0)
-            right1.setVelocity(0.0)
-            left2.setVelocity(0.0)
-            right2.setVelocity(0.0)
+            left1.setVelocity(3.0)
+            right1.setVelocity(5.0)
+            left2.setVelocity(3.0)
+            right2.setVelocity(5.0)
 
         robot.step(timetime)
 
@@ -384,7 +384,7 @@ class Agent:
         prepare_state_prime = (next_dis, next_robot_angle, min_dis_1, nxt_angle_obs)+tuple(next_lidar_state)
         state_prime_r = np.round(prepare_state_prime, 3)
 
-        print("goal_dis_R = {}, goal_angle_R = {}, obs_dis_R = {}, goal_R = {}, collision_R = {}, TOTAL_REWARD = {}, FINISH? = {}".format(goal_distance_reward, angle_reward,obstacle_distance_reward,goal_reward,collision_reward,total_reward,done_num))
+        #print("goal_dis_R = {}, goal_angle_R = {}, obs_dis_R = {}, goal_R = {}, collision_R = {}, TOTAL_REWARD = {}, FINISH? = {}".format(goal_distance_reward, angle_reward,obstacle_distance_reward,goal_reward,collision_reward,total_reward,done_num))
 
         return state_prime_r, total_reward, done_num, goal, count_g, collide
 
@@ -532,7 +532,7 @@ for n_epi in range(itteration):
     env.prepare_episode()
     goal_num = random.randrange(0, 8)
     goal_x, goal_y = env.goal_position(goal_num)
-    epsilon = max(0.01, 0.50 - 0.01*(n_epi/20))
+    epsilon = max(0.01, 0.20 - 0.01*(n_epi/20))
     collide_count = False
     reward = 0
     score = 0
@@ -544,7 +544,7 @@ for n_epi in range(itteration):
 
     print("episode = {}, goal_number = {}, best_score = {}, epsilon = {}".format(n_epi +1, goal_num, best_score, epsilon*100))
 
-    while robot.step(timestep) != -1 and collide_count == False:
+    while robot.step(timestep) != -1 and collide_count == False and step < 3000:
         
         lidar_point = lidar.getPointCloud()
         _, _, yaw = imu.getRollPitchYaw() 
@@ -598,6 +598,8 @@ for n_epi in range(itteration):
             print("new_num ={}, goal_x = {}, goal_y = {}".format(new_num, goal_x, goal_y))
             count_g = 0
             g_check == False
+            car_x, car_y = env.car_position()
+            distance, robot_angle = env.distance(car_x, car_y, goal_x, goal_y, yaw)
 
     episode_lst.append(n_epi+1)
     
