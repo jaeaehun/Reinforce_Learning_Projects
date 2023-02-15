@@ -11,7 +11,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 from matplotlib import pyplot as plt
 import numpy as np
+from tensorboardX import SummaryWriter
+summary = SummaryWriter()
 
+writer = SummaryWriter(logdir='DQN')
 loss_maen_lst = []
 
 robot = Supervisor()
@@ -42,9 +45,9 @@ lidar.enablePointCloud()
 imu = robot.getDevice('inertial unit')
 imu.enable(timestep)
 
-learning_rate = 0.001
+learning_rate = 5e-5
 gamma = 0.98
-buffer_limit = 300000
+buffer_limit = 500000
 batch_size = 128
 itteration = 1000000
 
@@ -171,6 +174,8 @@ class Enviroment:
     def goal_dis_reward(self, dis1, dis2):
         global reward
         #print("dis1 = {}, dis2 = {}, dis3 = {}".format(dis1, dis2, dis2/dis1))
+
+        print("dis1 = ", dis1)
         if dis2/dis1 < 1:
             #print("distance reward positive")
             reward = 10*(1-dis2/dis1)
@@ -304,49 +309,49 @@ class Agent:
     def __init__(self) -> None:
         pass
 
-    def action(self, num, goal_x, goal_y, count_g, count_c, step):
+    def action(self, num, goal_x, goal_y, count_g, count_c, init_dis):
         
         if num == 0: # 0.75 m/s
-            left1.setVelocity(5.0)
-            right1.setVelocity(5.0)
-            left2.setVelocity(5.0)
-            right2.setVelocity(5.0)
+            left1.setVelocity(0.0)
+            right1.setVelocity(0.0)
+            left2.setVelocity(0.0)
+            right2.setVelocity(0.0)
 
         elif num == 1: # 1.5 rad/s
-            left1.setVelocity(5.0) 
-            right1.setVelocity(10.0)
-            left2.setVelocity(5.0)
-            right2.setVelocity(10.0)
+            left1.setVelocity(0.0) 
+            right1.setVelocity(0.0)
+            left2.setVelocity(0.0)
+            right2.setVelocity(0.0)
 
         elif num == 2: # 1.5 rad/s
-            left1.setVelocity(10.0)
-            right1.setVelocity(5.0)
-            left2.setVelocity(10.0)
-            right2.setVelocity(5.0)
+            left1.setVelocity(0.0)
+            right1.setVelocity(0.0)
+            left2.setVelocity(0.0)
+            right2.setVelocity(0.0)
 
         elif num == 3: # 0.6 rad/s
-            left1.setVelocity(5.0)
-            right1.setVelocity(1.8)
-            left2.setVelocity(5.0)
-            right2.setVelocity(1.8)
+            left1.setVelocity(0.0)
+            right1.setVelocity(0.0)
+            left2.setVelocity(0.0)
+            right2.setVelocity(0.0)
 
         elif num == 4: # 0.6 rad/s
-            left1.setVelocity(1.8)
-            right1.setVelocity(5.0)
-            left2.setVelocity(1.8)
-            right2.setVelocity(5.0)
+            left1.setVelocity(0.0)
+            right1.setVelocity(0.0)
+            left2.setVelocity(0.0)
+            right2.setVelocity(0.0)
 
         elif num == 5: # 0.6 rad/s
-            left1.setVelocity(5.0)
-            right1.setVelocity(3.0)
-            left2.setVelocity(5.0)
-            right2.setVelocity(3.0)
+            left1.setVelocity(0.0)
+            right1.setVelocity(0.0)
+            left2.setVelocity(0.0)
+            right2.setVelocity(0.0)
 
         elif num == 6: # 0.6 rad/s
-            left1.setVelocity(3.0)
-            right1.setVelocity(5.0)
-            left2.setVelocity(3.0)
-            right2.setVelocity(5.0)
+            left1.setVelocity(0.0)
+            right1.setVelocity(0.0)
+            left2.setVelocity(0.0)
+            right2.setVelocity(0.0)
 
         robot.step(timetime)
 
@@ -362,7 +367,7 @@ class Agent:
 
         _, collide, _ = env.collision(min_dis_1, count_c)
 
-        goal_distance_reward = env.goal_dis_reward(distance, next_dis)
+        goal_distance_reward = env.goal_dis_reward(init_dis, next_dis)
         angle_reward = env.goal_angle_reward(next_robot_angle)
         obstacle_distance_reward = env.obs_dis_reward(min_dis_1)
         goal_reward, _, count_g = env.goal_check(next_dis, count_g)
@@ -376,15 +381,21 @@ class Agent:
         done_num = 0.0 if done else 1.0
 
         total_reward = goal_distance_reward * angle_reward + goal_reward + collision_reward + obstacle_distance_reward
+        prepare_state_prime = (next_dis, next_robot_angle, min_dis_1, nxt_angle_obs)+tuple(next_lidar_state)
+        state_prime_r = np.round(prepare_state_prime, 3)
 
-        #print("goal_dis_R = {}, goal_angle_R = {}, obs_dis_R = {}, goal_R = {}, collision_R = {}, TOTAL_REWARD = {}, FINISH? = {}".format(goal_distance_reward, angle_reward,obstacle_distance_reward,goal_reward,collision_reward,total_reward,done_num))
+        print("goal_dis_R = {}, goal_angle_R = {}, obs_dis_R = {}, goal_R = {}, collision_R = {}, TOTAL_REWARD = {}, FINISH? = {}".format(goal_distance_reward, angle_reward,obstacle_distance_reward,goal_reward,collision_reward,total_reward,done_num))
 
-        return (next_dis, next_robot_angle, min_dis_1, nxt_angle_obs)+tuple(next_lidar_state), total_reward, done_num, goal, count_g, collide
+        return state_prime_r, total_reward, done_num, goal, count_g, collide
 
     def sample_action(self, obs, epsilon):
+        q.eval()
+        with torch.no_grad():
+            #print(q.eval())
+            out = q.forward(obs)
 
-        out = q.forward(obs)
         coin = random.random()
+
         if coin < epsilon:
 
             return  random.randrange(0, 7)
@@ -392,72 +403,73 @@ class Agent:
 
             return out.argmax().item()
 
-
 class Qnet(nn.Module):
 
     def __init__(self):
         super(Qnet, self).__init__()
 
-        self.fc1 = nn.Linear(132, 256)  # 입력 state 4개
-        self.fc2 = nn.Linear(256, 256) 
-        self.fc3 = nn.Linear(256, 256) 
-        self.fc4 = nn.Linear(256, 256)
-        self.fc5 = nn.Linear(256, 7)  
+        self.fc1 = nn.Linear(132, 128)  # 입력 state 4개
+        self.fc2 = nn.Linear(128, 128) 
+        self.fc3 = nn.Linear(128, 128) 
+        self.fc4 = nn.Linear(128, 128)
+        self.fc5 = nn.Linear(128, 7)  
 
-        self.bn1 = nn.BatchNorm1d(1)
-        self.bn2 = nn.BatchNorm1d(1)
-        self.bn3 = nn.BatchNorm1d(1)
-        self.bn4 = nn.BatchNorm1d(1)
+        self.bn1 = nn.BatchNorm1d(128)#, track_running_stats=True)
+        self.bn2 = nn.BatchNorm1d(128)#, track_running_stats=True)
+        self.bn3 = nn.BatchNorm1d(128)#, track_running_stats=True)
+        #self.bn4 = nn.BatchNorm1d(256, track_running_stats=True)
 
         self.dropout = torch.nn.Dropout(0.3)
 
     def forward(self, x):
 
-        x= self.fc1(x)
+
+        x = F.leaky_relu(self.fc1(x))
         x = self.bn1(x)
-        x = F.leaky_relu(x)
-        self.dropout(x)
+        x = self.dropout(x)
 
-        x = self.fc2(x)
+        x = F.leaky_relu(self.fc2(x))
         x = self.bn2(x)
-        x = F.leaky_relu(x)
-        self.dropout(x)
+        x = self.dropout(x)
 
-        x = self.fc3(x)
+        x = F.leaky_relu(self.fc3(x))
         x = self.bn3(x)
-        x = F.leaky_relu(x)
-        self.dropout(x)
-
-        x = self.fc4(x)
-        x = self.bn4(x)
-        x = F.leaky_relu(x)
-        self.dropout(x)
+        x = self.dropout(x)
 
         x = self.fc5(x)
 
         return x
 
-    def train(self, q, q_target, memory, optimizer, batch_size, episode_lst):
-        s, a, r, s_prime, done_mask = memory.sample(batch_size)
-        #print("s_dim=",s.dim())
+
+
+    def study(self, q, q_target, memory, optimizer, batch_size):
+        q.train()
+        #s, a, r, s_prime, done_mask = memory.sample(batch_size)
         #print("q_target_s_prime=", q_target(s_prime))
         loss_lis = []
-        #for i in range(50):
-        s, a, r, s_prime, done_mask = memory.sample(batch_size)
+        for i in range(10):
+            s, a, r, s_prime, done_mask = memory.sample(batch_size)
 
-        q_out = q(s.unsqueeze(0))
+            #print("s shape =", s.shape)
 
-        q_a = torch.gather(q_out.squeeze(0), 1, a)
+            q_out = q(s)
+            
+            #print("q_out =", q_out)
 
-        max_q_prime = torch.max(q_target(s_prime.unsqueeze(0)))
-        target = r + gamma*max_q_prime*done_mask
-        loss = F.smooth_l1_loss(target, q_a)
-        loss_lis.append(loss.item())
-            #writer.add_scalar('training loss', loss , i)
+            q_a = torch.gather(q_out, 1, a)
+            
+            #print("action =", a)
+            #print("q_a=", q_a)
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            max_q_prime = torch.max(q_target(s_prime))
+            #print(max_q_prime )
+            target = r + gamma*max_q_prime*done_mask
+            loss = F.smooth_l1_loss(target, q_a)
+            loss_lis.append(loss.item())
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
         #loss_mean = statistics.mean(loss_lis)
         #loss_maen_lst.append(loss_mean)
@@ -466,8 +478,6 @@ class Qnet(nn.Module):
         #writer.add_scalar('training loss', loss , i)
         #writer.close()
         #print("train_finish")
-
-
 
 
 class ReplayBuffer:
@@ -491,7 +501,7 @@ class ReplayBuffer:
             s_prime_lst.append(s_prime)
             done_mask_lst.append([done_mask])
 
-            return torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), torch.tensor(r_lst), torch.tensor(s_prime_lst, dtype=torch.float), torch.tensor(done_mask_lst)
+        return torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), torch.tensor(r_lst), torch.tensor(s_prime_lst, dtype=torch.float), torch.tensor(done_mask_lst)
 
     def size(self):
         return len(self.buffer)
@@ -506,7 +516,6 @@ q_target = Qnet()
 memory = ReplayBuffer()
 optimizer = optim.Adam(q.parameters(), lr=learning_rate)
 q_target.load_state_dict(q.state_dict())
-#state = (0,0,0,0)
 
 score_lst = []
 mean_score_lst = []
@@ -514,7 +523,7 @@ episode_lst = []
 
 for n_epi in range(itteration):
 
-    if n_epi % 2 ==0 and n_epi !=0:
+    if n_epi % 20 ==0 and n_epi !=0:
         print("target_network_update")
         q_target.load_state_dict(q.state_dict())
         
@@ -523,7 +532,7 @@ for n_epi in range(itteration):
     env.prepare_episode()
     goal_num = random.randrange(0, 8)
     goal_x, goal_y = env.goal_position(goal_num)
-    epsilon = max(0.01, 0.10 - 0.01*(n_epi/200))
+    epsilon = max(0.01, 0.50 - 0.01*(n_epi/20))
     collide_count = False
     reward = 0
     score = 0
@@ -532,16 +541,14 @@ for n_epi in range(itteration):
     count_g = 0
     goal_count_lst = []
     collision_count_lst = []    
-    #done = False
-    print("episode = {}, goal_number = {}, best_score = {}".format(n_epi +1, goal_num, best_score))
+
+    print("episode = {}, goal_number = {}, best_score = {}, epsilon = {}".format(n_epi +1, goal_num, best_score, epsilon*100))
 
     while robot.step(timestep) != -1 and collide_count == False:
-        #print("step_start=", step)
         
         lidar_point = lidar.getPointCloud()
         _, _, yaw = imu.getRollPitchYaw() 
         #vel_x, vel_y, _, _, _, angular_vel = robot_node.getVelocity()
-        #print("x= {}, y={}, z = {}".format(vel_x, vel_y, angular_vel))
 
         if step == 0:
 
@@ -549,34 +556,26 @@ for n_epi in range(itteration):
             distance, robot_angle = env.distance(car_x, car_y, goal_x, goal_y, yaw)
             lidar_state, min_dis, obs_angle = env.point_cloud(lidar_point)
 
-            state = (distance, robot_angle, min_dis, obs_angle) + tuple(lidar_state) 
-            #print("if _ state = ", state)
-        
-       # print("input_ state =", state)
-        input = torch.tensor(state).float().unsqueeze(0)
-        input_prime = input.unsqueeze(0)
-        #print("state_dim={}, state shape = {}".format(input.ndim, input.shape))
-        #input_prime = input.unsqueeze(0)
-        select_action = car.sample_action(input_prime, epsilon)
+            prepare_state= (distance, robot_angle, min_dis, obs_angle) + tuple(lidar_state)
+            state = np.round(prepare_state, 3)
+
+        input = torch.from_numpy(state).float().unsqueeze(0)
+        #input.unsqueeze(1)
+        #print("input =", input.dim())
+        select_action = car.sample_action(input, epsilon)
+
         step += 1
-        state_prime, total_reward, done_num, g_check, count_g, collide_count = car.action(select_action, goal_x, goal_y, count_g, count_c, step)   
-        #print("state_prime =", state_prime)
+        state_prime, total_reward, done_num, g_check, count_g, collide_count = car.action(select_action, goal_x, goal_y, count_g, count_c, distance)   
         score += total_reward
         
         memory.put((state, select_action, reward, state_prime, done_num))
         
         state = state_prime
-        #print("after_state =", state)
+        #print("fuck")
 
-        #if env.end_episode(step) == True:
- 
-            #break
 
-        if memory.size() > 2000:
-            q.train(q, q_target, memory, optimizer, batch_size, episode_lst)
-
-        elif memory.size() > 2000 and memory.size() < 2003 :
-            print("train can start")
+        #elif memory.size() > 2000 and memory.size() < 2003 :
+            #print("train can start")
 
         if collide_count == True:
             collision_count_lst.append(1)
@@ -600,15 +599,11 @@ for n_epi in range(itteration):
             count_g = 0
             g_check == False
 
-
-            #print("train_start")
-
-        #print("goal_x= {}, goal_y = {}, count_g = {}".format(goal_x, goal_y, count_g))
-            
-        #print(memory.size())
-    #print("step=", step)
-
     episode_lst.append(n_epi+1)
+    
+    
+    if memory.size() > 2000:
+        q.study(q, q_target, memory, optimizer, batch_size)
 
     if len(collision_count_lst)+len(goal_count_lst) !=0:
         if len(goal_count_lst)*100/(len(collision_count_lst)+len(goal_count_lst)) >90 or n_epi % 2 ==0:
@@ -630,12 +625,12 @@ for n_epi in range(itteration):
 
     elif val == 0:
         print("NO collide and No goal")
+        
+    
 
     score_lst.append(score)
     mean_score_lst.append(statistics.mean(score_lst))
-    #if memory.size() >= 20000:
     #env.graph_loss(episode_lst, loss_maen_lst)
     env.graph(episode_lst, score_lst, mean_score_lst)
 
-    #if n_epi%10 == 0 and n_epi != 0:
-    #    print("episode = {}, avg_score = {}, epsilon = {}".format(n_epi+1, score, epsilon))
+
