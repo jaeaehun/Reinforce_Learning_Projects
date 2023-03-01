@@ -545,6 +545,8 @@ memory = ReplayBuffer()
 optimizer = optim.Adam(q.parameters(), lr=learning_rate)
 q_target.load_state_dict(q.state_dict())
 
+#q = torch.load('/home/jaehun/DQN_network' + 'model.pt') 
+
 score_lst = []
 mean_score_lst = []
 episode_lst = []
