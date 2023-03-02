@@ -1,6 +1,7 @@
-import pygame
-from pygame.locals import *
-import sys  # 외장 모듈
+# -*- coding: utf-8 -*-
+
+from controller import Supervisor
+import statistics
 import math
 import collections
 import random
@@ -9,62 +10,503 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from matplotlib import pyplot as plt
+import numpy as np
+from tensorboardX import SummaryWriter
+summary = SummaryWriter()
 
+writer = SummaryWriter(logdir='DQN')
+loss_maen_lst = []
 
-WIDTH = 800
-HEIGHT = 600
-# 초기화
-pygame.init()
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("PyGame")
-clock = pygame.time.Clock()
+robot = Supervisor()
+timestep = int(robot.getBasicTimeStep())
 
-learning_rate = 0.0005
+timetime = 32
+
+robot_node = robot.getFromDef('car')
+if robot_node is None:
+    print("No DEF MY_ROBOT node found in the current world file\n")    
+
+left1 = robot.getDevice('motor_1')
+right1= robot.getDevice('motor_2')
+
+left2 = robot.getDevice('motor_3')
+right2= robot.getDevice('motor_4')
+
+left1.setPosition(float('inf'))
+right1.setPosition(float('inf'))
+
+left2.setPosition(float('inf'))
+right2.setPosition(float('inf'))
+
+lidar = robot.getDevice('lidar')
+lidar.enable(timestep)
+lidar.enablePointCloud()
+
+imu = robot.getDevice('inertial unit')
+imu.enable(timestep)
+
+learning_rate = 0.0002
 gamma = 0.98
 buffer_limit = 500000
-batch_size = 32
+batch_size = 64
+itteration = 1000000
+
+start_time = robot.getTime()
+
+class Enviroment:
+
+    def __init__(self) -> None:
+        pass
+
+    def prepare_episode(self):
+
+        left1.setVelocity(0.0)
+        right1.setVelocity(0.0) 
+        left2.setVelocity(0.0)
+        right2.setVelocity(0.0)
+        translation_field = robot_node.getField('translation')
+        rotation_field = robot_node.getField('rotation')
+
+        new_value = [0, 0, 0.258]
+        rotation_value = [0, 0, 1, 1.5708]
+        translation_field.setSFVec3f(new_value)
+        rotation_field.setSFRotation(rotation_value)
+
+    def prepare_state(self, goal_x, goal_y):
+
+        robot.step(1)
+
+        lidar_point = lidar.getPointCloud()
+        _, _, yaw = imu.getRollPitchYaw() 
+
+        car_x, car_y = self.car_position()
+        distance, robot_angle = self.distance(car_x, car_y, goal_x, goal_y, yaw)
+        lidar_state, min_dis, obs_angle = self.point_cloud(lidar_point)
+
+        prepare_state= (distance, robot_angle, min_dis, obs_angle) + tuple(lidar_state)
+        state = prepare_state
+
+        return state, distance
+
+    def end_episode(self, num):
+
+        if num >= 2999 :
+            return True
+
+        else:
+            return False
+
+    def done_mask(self, colli, g):
+        
+        if colli == True or g == True:
+
+            return True
+        
+        else:
+            return False
+
+    def car_position(self):
+
+        self.pos = robot_node.getPosition()        
+        
+        x = self.pos[0]
+        y = self.pos[1]
+
+        return x, y
+
+    def distance(self, cx, cy, gx, gy, yaw):
+
+        distance = math.sqrt((cx - gx) ** 2 + (cy - gy) ** 2)
+
+        trans_matrix = np.array([
+                [math.cos(yaw), -math.sin(yaw), cx],
+                [math.sin(yaw),math.cos(yaw), cy],
+                [0 ,0 ,1 ]])
+        local_point = np.linalg.inv(trans_matrix).dot([gx, gy ,1])
+        goal_angle = math.atan2(local_point[1], local_point[0])
+
+        return distance, goal_angle
+
+    def point_cloud(self, point):
+        lidar_distance_1 = []
+        lidar_angle_1 = []
+
+        for i in range(len(point)):
+            point_distance = math.sqrt(point[i].x**2 + point[i].y**2) # + point[i].z**2)
+            point_angle = math.atan2(point[i].y , point[i].x)
+
+            if point_distance == float('inf'):
+                lidar_distance_1.append(10)
+                lidar_angle_1.append(point_angle)
+
+            elif point_distance == np.nan:
+                lidar_distance_1.append(0)
+                lidar_angle_1.append(point_angle)
+
+            else:
+
+                lidar_distance_1.append(point_distance)
+                lidar_angle_1.append(point_angle)
+        
+        #len(lidar_angle_1)
+        min_dis_1 = min(lidar_distance_1)
+        min_pos_1 = lidar_distance_1.index(min_dis_1)
+        angle_1 =lidar_angle_1[min_pos_1]
+
+        return lidar_distance_1, min_dis_1, angle_1
+
+    def goal_check(self, distance, n):
+        global reward
+
+        if distance < 0.71 and n == 0:
+            print("goal")
+            reward = 2000
+            n = 1
+
+            return reward, True, n
+
+        else:
+            reward = 0
+            n = 0
+            return reward, False, n
+
+    def collision(self, dis1, n):
+        global reward
+
+        #print("dis1 = {}, dis2 = {}, dis3 = {}, dis4 = {}".format(dis1, dis2, dis3 ,dis4))
+
+        if dis1< 0.3 and n == 0:
+            #print("collision")
+            n = 1
+            reward = -2000
+
+            return reward, True, n
+
+        else:
+            reward = 0.0          
+            n = 0
+            return reward, False, n
+            
+    def goal_dis_reward(self, dis1, dis2, angle):
+
+        global reward
+        
+        reward = 0
+
+        rate = dis2/dis1
+        
+        angle_rate = angle/1.5708
+       
+        #print("dis1 = {}, dis2 = {}, angle = {}, rate = {}, angle_rate={}".format(dis1, dis2, angle, rate, angle_rate))
+
+        if rate < 1 and angle_rate < 1 :
+            #print("near")
+
+            reward = (100*(abs(dis1-dis2))/dis2)*(1- angle_rate)#/abs(angle)#*(1-math.cos(angle)/1.5708)
+
+            #print("dis<1 r = {}".format(reward))
+
+            return reward
+          
+            
+        else:
+            reward = -(abs(dis1-dis2))*dis2 * abs(angle_rate)
+            
+            return reward
+            
+    def obs_dis_reward(self, obs1, obs2):
+        global reward
+        
+        reward = 0
+
+        #print("obs1 = {}, obs2 = {}".format(obs1, obs2))
+
+        rate = obs2/obs1
+
+        safe_dis = 0.8
+
+        if obs1 < safe_dis and rate > 1: 
+            
+            reward = 1
+        
+            #print("obs > 0 R = {}, rate = {}".format(reward, rate))
+
+            return reward
+
+        elif obs2 < safe_dis and rate <= 1:
+
+            reward = -3.5/(obs2)
+            #print("obs < 0 R = {}".format(reward))
+            
+            return reward
+
+        else:
+            reward = 0
+
+            return reward
+
+    def goal_position(self, num):
+
+        if num == 0:
+
+            x = 0#-2.5
+            y = 5#3.5
+
+            return x, y
+
+        elif num == 1:
+
+            x = -3.5#-5
+            y = 4.5#0
+
+            return x, y
+
+        elif num == 2:
+
+            x = -8#-1.5
+            y = 4.5#-4
+
+            return x, y
+
+        elif num == 3:
+
+            x = 2#3
+            y = -4.5#-4.5
+
+            return x, y
+
+        elif num == 4:
+
+            x = 5.5#3.25
+            y = -4.5#1.5
+
+            return x, y
+
+        elif num == 5:
+
+            x = -7.3#3
+            y = -4.5#4
+
+            return x, y
+
+        elif num == 6:
+
+            x = -2#-0.5
+            y = -4.5#5
+
+            return x, y
+
+        else:
+            x = -4#5.25
+            y = 0#5.25
+
+            return x, y
+
+    def graph(self, episode, score_list, mean_score_list):
+
+        plt.cla()
+        plt.xlabel("episode")
+        plt.ylabel("score")
+        #plt.subplot(222)
+        plt.plot(episode, score_list, label="score")
+        plt.plot(episode, mean_score_list, label="mean_score")
+        plt.legend()
+
+        plt.show(block=False)
+        plt.pause(1)
+        #plt.close()
+
+    def graph_loss(self, episode, loss):
+
+        plt.cla()
+        plt.xlabel("episode")
+        plt.ylabel("loss_mean")
+
+        #plt.subplot(221)
+        plt.plot(episode, loss, label="loss_mean")
+
+        plt.show(block=False)
+        plt.pause(1)
+        #plt.close()
+
+class Agent:
+
+    def __init__(self) -> None:
+        pass
+
+    def action(self, num, goal_x, goal_y, count_g, count_c, init_dis, min_dis_0, ddd):
+        
+        if num == 0: # 0.50 m/s
+            left1.setVelocity(3.33)
+            right1.setVelocity(3.33)
+            left2.setVelocity(3.33)
+            right2.setVelocity(3.33)
+
+        elif num == 1: # 0.5 rad/s
+            left1.setVelocity(4.166) 
+            right1.setVelocity(2.5)
+            left2.setVelocity(4.166)
+            right2.setVelocity(2.5)
+
+        elif num == 2: # 0.5 rad/s
+            left1.setVelocity(2.5)
+            right1.setVelocity(4.166)
+            left2.setVelocity(2.5)
+            right2.setVelocity(4.166)
+
+        elif num == 3: # 1rad/s
+            left1.setVelocity(5)
+            right1.setVelocity(1.666)
+            left2.setVelocity(5)
+            right2.setVelocity(1.666)
+
+        elif num == 4: # 1rad/s
+            left1.setVelocity(1.666)
+            right1.setVelocity(5)
+            left2.setVelocity(1.666)
+            right2.setVelocity(5)
+
+        elif num == 5: # 1.5rad/s
+            left1.setVelocity(5.833)
+            right1.setVelocity(0.833)
+            left2.setVelocity(5.833)
+            right2.setVelocity(0.833)
+
+        elif num == 6: # 1.5 rad/s
+            left1.setVelocity(0.833)
+            right1.setVelocity(5.833)
+            left2.setVelocity(0.833)
+            right2.setVelocity(5.833)
+
+        robot.step(timetime)
+
+        #nxt_vel_x, nxt_vel_y, _, _, _, nxt_angular_vel = robot_node.getVelocity()
+
+        nxt_car_x, nxt_car_y = env.car_position()
+        lidar_point = lidar.getPointCloud()
+        _, _, next_yaw = imu.getRollPitchYaw()
+        next_dis, next_robot_angle = env.distance(nxt_car_x, nxt_car_y, goal_x, goal_y, next_yaw)
+        next_lidar_state, min_dis_1, nxt_angle_obs= env.point_cloud(lidar_point)
+
+        _, goal ,_ = env.goal_check(next_dis, count_g)
+
+        _, collide, _ = env.collision(min_dis_1, count_c)
+
+        goal_distance_reward = env.goal_dis_reward(init_dis, next_dis, next_robot_angle)
+        #angle_reward = env.goal_angle_reward(next_robot_angle)
+        obstacle_distance_reward = env.obs_dis_reward(min_dis_0, min_dis_1)
+        goal_reward, _, count_g = env.goal_check(next_dis, count_g)
+        collision_reward, _, count_c = env.collision(min_dis_1, count_c)
+
+        if collide == True:
+            env.prepare_episode()
+            count_c = 0
+
+        done = env.done_mask(collide, goal)
+        done_num = 0.0 if done else 1.0
+
+        
+        test_reward = goal_distance_reward + obstacle_distance_reward + goal_reward + collision_reward
+        prepare_state_prime = (next_dis, next_robot_angle, min_dis_1, nxt_angle_obs)+tuple(next_lidar_state)
+        state_prime_r = prepare_state_prime
+
+        #print("goal_dis_R = {}, obs_dis_R = {}, test_reward = {}".format(goal_distance_reward, obstacle_distance_reward, test_reward))
+
+        return state_prime_r, test_reward, done_num, goal, count_g, collide
+
+    def sample_action(self, obs, epsilon):
+        #q.eval()
+        #with torch.no_grad():
+            #print(q.eval())
+        out = q.forward(obs)
+
+        coin = random.random()
+
+        if coin < epsilon:
+
+            return  random.randrange(0, 7)
+        else:
+
+            return out.argmax().item()
+
+class Qnet(nn.Module):
+
+    def __init__(self):
+        super(Qnet, self).__init__()
+
+        self.fc1 = nn.Linear(132, 128)  # 입력 state 4개
+        self.fc2 = nn.Linear(128, 128) 
+        self.fc3 = nn.Linear(128, 128) 
+        self.fc4 = nn.Linear(128, 128)
+        self.fc5 = nn.Linear(128, 128)
+        self.fc6 = nn.Linear(128, 7)  
+
+        #self.dropout = torch.nn.Dropout(0.2)
+
+    def forward(self, x):
 
 
-class Character:
-    def __init__(self, x, y, radius, speed):
-        self.x = x
-        self.y = y
-        self.radius = radius
-        self.speed = speed
+        x = F.relu(self.fc1(x))
+        #x = self.dropout(x)
 
-    def draw(self):
-        pygame.draw.circle(screen, (255, 255, 255), (self.x, self.y), self.radius, 0)
+        x = F.relu(self.fc2(x))
+        #x = self.dropout(x)
 
-    def move(self, x, y):
-        self.x += x * self.speed
-        self.y += y * self.speed
+        x = F.relu(self.fc3(x))
+        #x = self.dropout(x)
 
-    def move_to(self, x, y):
-        self.x = x
-        self.y = y
+        x = F.relu(self.fc4(x))
+        #x = self.dropout(x)
+                
+        x = F.relu(self.fc5(x))
+        #x = self.dropout(x)
 
+        x = self.fc6(x)
 
-class Goal:
-    def __init__(self, x, y, radius):
-        self.x = x
-        self.y = y
-        self.radius = radius
-
-    def draw(self):
-        pygame.draw.circle(screen, (255, 0, 0), (self.x, self.y), self.radius, 0)
+        return x
 
 
-class Obstacle:
-    def __init__(self, x, y, radius):
-        self.x = x
-        self.y = y
-        self.radius = radius
 
-    def draw(self):
-        pygame.draw.circle(screen, (0, 255, 0), (self.x, self.y), self.radius, 0)
+    def study(self, q, q_target, memory, optimizer, batch_size):
+        
+        #s, a, r, s_prime, done_mask = memory.sample(batch_size)
+        #print("q_target_s_prime=", q_target(s_prime))
+        loss_lis = []
+        for i in range(30):
+            s, a, r, s_prime, done_mask = memory.sample(batch_size)
+
+            #print("s shape =", s.shape)
+
+            q_out = q(s)
+            
+            #print("q_out =", q_out)
+
+            q_a = torch.gather(q_out, 1, a)
+            
+            #print("action =", a)
+            #print("q_a=", q_a)
+
+            max_q_prime = q_target(s_prime).max(1)[0].unsqueeze(1)#torch.max(q_target(s_prime))
+            #print(max_q_prime )
+            target = r + gamma*max_q_prime*done_mask
+            loss = F.smooth_l1_loss(target, q_a)
+            loss_lis.append(loss.item())
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        #loss_mean = statistics.mean(loss_lis)
+        #loss_maen_lst.append(loss_mean)
+        
+        #env.graph_loss(episode_lst, loss_maen_lst)
+        #writer.add_scalar('training loss', loss , i)
+        #writer.close()
+        #print("train_finish")
 
 
 class ReplayBuffer:
+
     def __init__(self):
         self.buffer = collections.deque(maxlen = buffer_limit)
 
@@ -76,6 +518,7 @@ class ReplayBuffer:
         s_lst, a_lst, r_lst, s_prime_lst, done_mask_lst = [], [], [], [], []
 
         for transition in mini_batch:
+
             s, a, r, s_prime, done_mask = transition
             s_lst.append(s)
             a_lst.append([a])
@@ -83,256 +526,125 @@ class ReplayBuffer:
             s_prime_lst.append(s_prime)
             done_mask_lst.append([done_mask])
 
-            return torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), torch.tensor(r_lst), torch.tensor(s_prime_lst, dtype=torch.float), torch.tensor(done_mask_lst)
+        return torch.tensor(s_lst, dtype=torch.float), torch.tensor(a_lst), torch.tensor(r_lst), torch.tensor(s_prime_lst, dtype=torch.float), torch.tensor(done_mask_lst)
 
     def size(self):
         return len(self.buffer)
 
 
-class Qnet(nn.Module):
-    def __init__(self):
-        super(Qnet, self).__init__()
+best_score = 0
 
-        self.fc1 = nn.Linear(10, 256)  # 입력 state 2개
-        self.fc2 = nn.Linear(256, 256)  # POLICY_NETWORK
-        self.fc3 = nn.Linear(256, 8)  # value_network
+env = Enviroment()
+car = Agent()
+q = Qnet()
+q_target = Qnet()
+memory = ReplayBuffer()
+optimizer = optim.Adam(q.parameters(), lr=learning_rate)
+q_target.load_state_dict(q.state_dict())
 
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+q = torch.load('/home/jaehun/DQN_test' + 'model.pt') 
 
-        return x
+score_lst = []
+mean_score_lst = []
+episode_lst = []
 
-    def sample_action(self, obs, epsilon):
-        out = self.forward(obs)
-        coin = random.random()
-        if coin < epsilon:
-            return random.randint(0, 7)
-        else:
-            return out.argmax().item()
+for n_epi in range(itteration):
 
-
-def train(q, q_target, memory, optimizer, batch_size):
-    for i in range(20):
-        s, a, r, s_prime, done_mask = memory.sample(batch_size)
-
-        q_out = q(s)
-        q_a = torch.gather(q_out, 1, a)
-
-        max_q_prime = torch.max(q_target(s_prime))
-        target = r + gamma*max_q_prime*done_mask
-        loss = F.smooth_l1_loss(target, q_a)
-        #print(loss)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-
-def select_action(k, s, g, re, o_1, o_2, o_3, o_4):
-    luck = s
-    reward = re
-
-    if luck == 0:
-        k.move(1, -1)
-
-
-    elif luck == 1:
-        k.move(1, 0)
-
-    elif luck == 2:
-        k.move(1, 1)
-
-    elif luck == 3:
-        k.move(0, 1)
-
-    elif luck == 4:
-        k.move(-1, 1)
-
-    elif luck == 5:
-        k.move(-1, 0)
-
-    elif luck == 6:
-        k.move(-1, -1)
-
-    else:
-        k.move(0, -1)
-
-    if collide_check(k, g) == True:
-        print("success")
-        reward += 500
-
-    if collide_check(k, o_1) == True:
-        print("accident")
-        reward -= 200
-
-    if collide_check(k, o_2) == True:
-        print("accident")
-        reward -= 200
-
-    if collide_check(k, o_3) == True:
-        print("accident")
-        reward -= 200
-
-    if collide_check(k, o_4) == True:
-        print("accident")
-        reward -= 200
-
-    if get_out_check(k) == True:
-        print("out")
-        reward -= 300
-
-    done = end_episode()
-
-    #data = [distance(k, g), distance(k, o_1), distance(k, o_2), distance(k, o_3), distance(k, o_4)]
-    #dx = k.x - g.x
-    #dy = k.y - g.y
-    #data = [[dx, dy]]
-    data = [k.x-g.x, k.y-g.y, k.x-o_1.x, k.y-o_1.y, k.x-o_2.x, k.y-o_2.y, k.x-o_3.x, k.y-o_3.y, k.x-o_4.x, k.x-o_4.y]
-
-    return data, reward, done
-
-
-def collide_check(character, goal):
-    distance = math.sqrt((character.x - goal.x) ** 2 + (character.y - goal.y) ** 2)
-    if distance < character.radius + goal.radius:
-        return True
-    else:
-        return False
-
-
-def get_out_check(k):
-    if k.x > WIDTH-50 or k.x < 50 or k.y > HEIGHT-50 or k.y < 50:
-        return True
-    else:
-        return False
-
-
-def distance(x, y):
-    dx = x.x - y.x
-    dy = x.y - y.y
-    dis = math.sqrt(dx ** 2 + dy ** 2)
-
-    return dis #abs(dx), abs(dy)
-
-
-def env_reset(k):
-    k.x = 600
-    k.y = 400
-    num = 0
-    score = 0
-    r = 0
-    #data_1 = [math.sqrt(300 ** 2 + 300 ** 2), math.sqrt(200 ** 2 + 100 ** 2), math.sqrt(400 ** 2 + 250 ** 2), 200, math.sqrt(150 ** 2 + 250 ** 2)]
-    data_1 = [300, 300, 200, 100, 400, 250, 0 , 200, 150, 250]
-
-    return num, score, r, data_1
-
-
-def end_episode():
-    clear = collide_check(me, goal)
-    impact = collide_check(me, obstacle)
-    impact_1 = collide_check(me, obstacle_1)
-    impact_2 = collide_check(me, obstacle_2)
-    impact_3 = collide_check(me, obstacle_3)
-    get_out = get_out_check(me)
-    if clear or impact or impact_1 or impact_2 or impact_3 or get_out:
-        return True
-    else:
-        return False
-
-
-def draw_env():
-    me.draw()
-    obstacle.draw()
-    obstacle_1.draw()
-    obstacle_2.draw()
-    obstacle_3.draw()
-    goal.draw()
-
-
-me = Character(600, 400, 20, 1)
-obstacle = Obstacle(400, 300, 20)
-obstacle_1 = Obstacle(200, 150, 20)
-obstacle_2 = Obstacle(600, 200, 20)
-obstacle_3 = Obstacle(450, 150, 20)
-goal = Goal(300, 100, 20)
-
-
-while True:
-    for n_epi in range(100000):
-
-        print("new")
-
-        draw_env()
-        pygame.display.update()
-
-        q = Qnet()
-        q_target = Qnet()
+    if n_epi % 20 ==0 and n_epi !=0:
+        print("target_network_update")
         q_target.load_state_dict(q.state_dict())
-        memory = ReplayBuffer()
+        
+    print("memory = ", memory.size())
+    env.prepare_episode()
+    goal_num = random.randrange(0, 8)
+    goal_x, goal_y = env.goal_position(goal_num)
+    state, init_dis =env.prepare_state(goal_x, goal_y)
+    #print("episode_state =", state)
+    epsilon = max(0.01, 0.30 - 0.01*(n_epi/100))
+    collide_count = False
+    reward = 0
+    score = 0
+    step = 0
+    count_c = 0
+    count_g = 0
+    goal_count_lst = []
+    collision_count_lst = []    
 
-        print_interval = 20
-        optimizer = optim.Adam(q.parameters(), lr=learning_rate)
+    print("episode = {}, goal_number = {}, goal_x = {},goal_y={}, best_score = {}, epsilon = {}".format(n_epi +1, goal_num, goal_x,goal_y,best_score, epsilon*100))
 
-        num, score, r, data_1 = env_reset(me)
-        epsilon = max(0.01, 0.05 - 0.01*(n_epi/200))
-        s = data_1
-        step_num = 0
+    while robot.step(timestep) != -1 and collide_count == False and step < 3000:
+        
+        lidar_point = lidar.getPointCloud()
+        _, _, yaw = imu.getRollPitchYaw() 
 
-        score_history = []
-        #plt.show()
-        while step_num < 2001:
+        input = torch.tensor(state).float()
 
-            clock.tick(120000000)
-            screen.fill((0, 0, 0))
+        select_action = car.sample_action(input, epsilon)
+        state_prime, input_reward, done_num, g_check, count_g, collide_count = car.action(select_action, goal_x, goal_y, count_g, count_c, state[0], state[2], init_dis)   
+        score += input_reward
+        
+        memory.put((state, select_action, input_reward, state_prime, done_num))
+        
+        state = state_prime
 
-            draw_env()
+        if collide_count == True:
+            collision_count_lst.append(1)
 
-            dis_0 = distance(me, goal)
+            break
 
-            a = q.sample_action(torch.tensor(data_1).float(), epsilon)
-            s_prime, r, done = select_action(me, a, goal, r, obstacle, obstacle_1, obstacle_2,
-                                                      obstacle_3)
+        if count_g == 1:
+            goal_count_lst.append(1)
+            key = 0
+            while key != 1:
+                new_num = random.randrange(0, 8)
+                if new_num != goal_num:
+                    key = 1
 
-            dis_1 = distance(me, goal)
+                else: 
+                    key =0
 
-            R_d = dis_1/dis_0
+            goal_x, goal_y = env.goal_position(new_num)
+            goal_num = new_num
+            print("new_num ={}, goal_x = {}, goal_y = {}".format(new_num, goal_x, goal_y))
+            count_g = 0
+            g_check == False
+            #car_x, car_y = env.car_position()
+            #distance, robot_angle = env.distance(car_x, car_y, goal_x, goal_y, yaw)
 
-            r += -10*R_d + 10
+        step += 1
+            
+    if memory.size() > 5000:
+        print("sudy _ start")
+        #q.train()
+        q.study(q, q_target, memory, optimizer, batch_size)
 
-            if distance(me, obstacle) or distance(me, obstacle_1) or distance(me, obstacle_2) or distance(me, obstacle_3) < 25:
+    episode_lst.append(n_epi+1)
+       
 
-                r -= 20/min(distance(me, obstacle), distance(me, obstacle_1), distance(me, obstacle_2), distance(me, obstacle_3))
+    if len(collision_count_lst)+len(goal_count_lst) !=0:
+        if len(goal_count_lst)*100/(len(collision_count_lst)+len(goal_count_lst)) >90 or n_epi % 2 ==0:
+            with torch.no_grad():
+                print("save_trained_parameter")
+                path = '/home/jaehun/DQN_test'
+                torch.save(q, path + 'model.pt')
+        
 
-            done_mask = 0.0 if done else 1.0
-            memory.put((s, a, r/10.0, s_prime, done_mask))
+    if score > best_score:
+        best_score = score
 
-            s = s_prime
+            
+    val = len(collision_count_lst)+len(goal_count_lst)
+    
+    if val != 0:           
+ 
+        print("# of episode :{}, score : {:.1f}, goal_rate = {}, collision_rate = {}, goal_count = {}, collide_count = {}".format(n_epi+1, score, len(goal_count_lst)*100/(len(collision_count_lst)+len(goal_count_lst)), len(collision_count_lst)*100/(len(collision_count_lst)+len(goal_count_lst)), len(goal_count_lst), len(collision_count_lst)))
 
-            score += r
-            score_history.append(score)
-            step_num += 1
-            #print("sn=",step_num)
-            #print(memory.size())
+    elif val == 0:
+        print("NO collide and No goal")
+        
+    
 
-            if end_episode() :
-                env_reset(me)
-
-            if memory.size() > 2000:
-                print("train_start")
-                train(q, q_target, memory, optimizer, batch_size)
-
-            pygame.display.update()
-
-            plt.plot(score_history)
-            plt.ylabel('score')
-            plt.xlabel('episode')
-
-
-        if n_epi % print_interval == 0 and n_epi != 0:
-            q_target.load_state_dict(q.state_dict())
-            print("n_episode :{}, score : {:.1f}, n_buffer : {}, eps : {:.1f}%".format(
-            n_epi, score / print_interval, memory.size(), epsilon * 100))
-
-
+    score_lst.append(score)
+    mean_score_lst.append(statistics.mean(score_lst))
+    #env.graph_loss(episode_lst, loss_maen_lst)
+    env.graph(episode_lst, score_lst, mean_score_lst)
