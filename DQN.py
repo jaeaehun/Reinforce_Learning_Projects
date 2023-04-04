@@ -45,11 +45,11 @@ lidar.enablePointCloud()
 imu = robot.getDevice('inertial unit')
 imu.enable(timestep)
 
-learning_rate = 0.00025 #학습률
-gamma = 0.98 #미래에 받을 보상은 98%만 반영
-buffer_limit = 500000 # 리플레이 버퍼 크기
-batch_size = 64 # 미니배치 크기
-itteration = 1000000 # 에피소드
+learning_rate = 0.00025
+gamma = 0.98
+buffer_limit = 500000
+batch_size = 64
+itteration = 1000000
 
 start_time = robot.getTime()
 
@@ -83,7 +83,7 @@ class Enviroment:
         distance, robot_angle = self.distance(car_x, car_y, goal_x, goal_y, yaw)
         lidar_state, min_dis, obs_angle = self.point_cloud(lidar_point)
 
-        prepare_state= (distance, robot_angle, min_dis, obs_angle) + tuple(lidar_state)
+        prepare_state= (distance, robot_angle, min_dis, obs_angle)
         state = prepare_state
 
         return state, distance
@@ -380,8 +380,6 @@ class Agent:
 
         robot.step(timetime)
 
-        #nxt_vel_x, nxt_vel_y, _, _, _, nxt_angular_vel = robot_node.getVelocity()
-
         nxt_car_x, nxt_car_y = env.car_position()
         lidar_point = lidar.getPointCloud()
         _, _, next_yaw = imu.getRollPitchYaw()
@@ -393,7 +391,6 @@ class Agent:
         _, collide, _ = env.collision(min_dis_1, count_c)
 
         goal_distance_reward = env.goal_dis_reward(init_dis, next_dis, next_robot_angle)
-        #angle_reward = env.goal_angle_reward(next_robot_angle)
         obstacle_distance_reward = env.obs_dis_reward(min_dis_0, min_dis_1)
         goal_reward, _, count_g = env.goal_check(next_dis, count_g)
         collision_reward, _, count_c = env.collision(min_dis_1, count_c)
@@ -407,17 +404,14 @@ class Agent:
 
         
         test_reward = goal_distance_reward + obstacle_distance_reward + goal_reward + collision_reward
-        prepare_state_prime = (next_dis, next_robot_angle, min_dis_1, nxt_angle_obs)+tuple(next_lidar_state)
+        prepare_state_prime = (next_dis, next_robot_angle, min_dis_1, nxt_angle_obs)
         state_prime_r = prepare_state_prime
-
-        #print("goal_dis_R = {}, obs_dis_R = {}, test_reward = {}".format(goal_distance_reward, obstacle_distance_reward, test_reward))
 
         return state_prime_r, test_reward, done_num, goal, count_g, collide
 
     def sample_action(self, obs, epsilon):
-        q.eval()
-        with torch.no_grad():
-            out = q.forward(obs)
+
+        out = q.forward(obs)
 
         coin = random.random()
 
@@ -433,51 +427,38 @@ class Qnet(nn.Module):
     def __init__(self):
         super(Qnet, self).__init__()
 
-        self.fc1 = nn.Linear(132, 128)  # 입력 state 4개
+        self.fc1 = nn.Linear(4, 128)  # 입력 state 4개
         self.fc2 = nn.Linear(128, 128) 
         self.fc3 = nn.Linear(128, 128) 
         self.fc4 = nn.Linear(128, 128)
         self.fc5 = nn.Linear(128, 7)  
 
-        nn.init.kaiming_normal_(self.fc1.weight)
-        nn.init.kaiming_normal_(self.fc2.weight)
-        nn.init.kaiming_normal_(self.fc3.weight)
-        nn.init.kaiming_normal_(self.fc4.weight)
-        nn.init.kaiming_normal_(self.fc5.weight)
-
-        self.dropout = torch.nn.Dropout(0.3)
-
     def forward(self, x):
 
+
         x = F.relu(self.fc1(x))
-        x = self.dropout(x)
-
         x = F.relu(self.fc2(x))
-        x = self.dropout(x)
-
         x = F.relu(self.fc3(x))
-        x = self.dropout(x)
-
         x = F.relu(self.fc4(x))
-        x = self.dropout(x)
 
         x = self.fc5(x)
 
         return x
 
-
     def study(self, q, q_target, memory, optimizer, batch_size):
-
-        
+        #q.train()
+        #s, a, r, s_prime, done_mask = memory.sample(batch_size)
+        #print("q_target_s_prime=", q_target(s_prime))
         loss_lis = []
-        for i in range(30): # 
+        for i in range(30):
             s, a, r, s_prime, done_mask = memory.sample(batch_size)
 
             q_out = q(s)
-
+            
             q_a = torch.gather(q_out, 1, a)
             
             max_q_prime = q_target(s_prime).max(1)[0].unsqueeze(1)#torch.max(q_target(s_prime))
+
             target = r + gamma*max_q_prime*done_mask
             loss = F.smooth_l1_loss(target, q_a)
             loss_lis.append(loss.item())
@@ -485,15 +466,6 @@ class Qnet(nn.Module):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
-        #loss_mean = statistics.mean(loss_lis)
-        #loss_maen_lst.append(loss_mean)
-        
-        #env.graph_loss(episode_lst, loss_maen_lst)
-        #writer.add_scalar('training loss', loss , i)
-        #writer.close()
-        #print("train_finish")
-
 
 class ReplayBuffer:
 
@@ -532,13 +504,15 @@ memory = ReplayBuffer()
 optimizer = optim.Adam(q.parameters(), lr=learning_rate)
 q_target.load_state_dict(q.state_dict())
 
+#q = torch.load('/home/jaehun/DQN_network' + 'model.pt') 
+
 score_lst = []
 mean_score_lst = []
 episode_lst = []
 
 for n_epi in range(itteration):
 
-    if n_epi % 20 ==0 and n_epi !=0: #타겟네트워크 업데이트 주기, 20번 주기 업데이트
+    if n_epi % 20 ==0 and n_epi !=0:
         print("target_network_update")
         q_target.load_state_dict(q.state_dict())
         
@@ -547,8 +521,8 @@ for n_epi in range(itteration):
     goal_num = random.randrange(0, 8)
     goal_x, goal_y = env.goal_position(goal_num)
     state, init_dis =env.prepare_state(goal_x, goal_y)
-    #print("episode_state =", state)
-    epsilon = max(0.01, 0.30 - 0.01*(n_epi/100)) #초반 탐험 비율, 지금은 30%로 설정, 1%
+    print("episode_state =", state)
+    epsilon = max(0.01, 0.30 - 0.01*(n_epi/100))
     collide_count = False
     reward = 0
     score = 0
@@ -564,21 +538,16 @@ for n_epi in range(itteration):
         
         lidar_point = lidar.getPointCloud()
         _, _, yaw = imu.getRollPitchYaw() 
-        #vel_x, vel_y, _, _, _, angular_vel = robot_node.getVelocity()
+
 
         input = torch.tensor(state).float()
-        #print("input =", input)
         select_action = car.sample_action(input, epsilon)
         state_prime, input_reward, done_num, g_check, count_g, collide_count = car.action(select_action, goal_x, goal_y, count_g, count_c, state[0], state[2], init_dis)   
         score += input_reward
         
         memory.put((state, select_action, input_reward, state_prime, done_num))
-
-        #print("state_prime =", state_prime)
         
         state = state_prime
-
-        #print("after_state = ", state)
 
         if collide_count == True:
             collision_count_lst.append(1)
@@ -601,26 +570,21 @@ for n_epi in range(itteration):
             print("new_num ={}, goal_x = {}, goal_y = {}".format(new_num, goal_x, goal_y))
             count_g = 0
             g_check == False
-            #car_x, car_y = env.car_position()
-            #distance, robot_angle = env.distance(car_x, car_y, goal_x, goal_y, yaw)
 
         step += 1
             
     if memory.size() > 2000:
-        print("study_start")
-        q.train()
         q.study(q, q_target, memory, optimizer, batch_size)
 
     episode_lst.append(n_epi+1)
-    
+   
     if len(collision_count_lst)+len(goal_count_lst) !=0:
         if len(goal_count_lst)*100/(len(collision_count_lst)+len(goal_count_lst)) >90 or n_epi % 2 ==0:
             with torch.no_grad():
                 print("save_trained_parameter")
-                path = '/home/jaehun/DQN_network' #자기 주소로 바꿀 
+                path = '/home/jaehun/DQN_network'
                 torch.save(q, path + 'model.pt')
         
-
     if score > best_score:
         best_score = score
             
@@ -637,5 +601,3 @@ for n_epi in range(itteration):
     mean_score_lst.append(statistics.mean(score_lst))
     #env.graph_loss(episode_lst, loss_maen_lst)
     env.graph(episode_lst, score_lst, mean_score_lst)
-
-
