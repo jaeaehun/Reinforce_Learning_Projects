@@ -210,7 +210,7 @@ class Enviroment:
           
             
         else:
-            reward = 0
+            reward = -(abs(dis1-dis2))*dis2 * abs(angle_rate)
             
             return reward
             
